@@ -17,7 +17,7 @@ fn test_pty_output_stream_injection_and_raw_accumulation() {
     assert!(harness.app.raw_output.is_empty());
 
     // Inject PTY stream output
-    let input_chunk_1 = "Hello, Splash PTY!\nSecond line of output";
+    let input_chunk_1 = "Hello, Splash PTY!\r\nSecond line of output";
     harness.inject_pty_output(input_chunk_1);
 
     // Verify raw output accumulation
@@ -29,12 +29,12 @@ fn test_pty_output_stream_injection_and_raw_accumulation() {
     assert_buffer_contains(buffer, "Second line of output");
 
     // Inject a second chunk to test stream accumulation
-    let input_chunk_2 = "\nThird line of output chunk";
+    let input_chunk_2 = "\r\nThird line of output chunk";
     harness.inject_pty_output(input_chunk_2);
 
     assert_eq!(
         harness.app.raw_output,
-        "Hello, Splash PTY!\nSecond line of output\nThird line of output chunk"
+        "Hello, Splash PTY!\r\nSecond line of output\r\nThird line of output chunk"
     );
 
     let buffer = harness.render_frame();
@@ -120,7 +120,7 @@ fn test_pty_output_truncation_large_stream() {
     for i in 1..=120 {
         lines.push(format!("Line {}", i));
     }
-    let full_output = lines.join("\n");
+    let full_output = lines.join("\r\n");
     harness.inject_pty_output(&full_output);
 
     // Raw output has all 120 lines
@@ -130,14 +130,14 @@ fn test_pty_output_truncation_large_stream() {
     let buffer = harness.render_frame();
     let grid = format_buffer_grid(buffer);
 
-    // Line 1 is truncated and absent from display_text/grid
+    // Line 1 is scrolled off top and absent from screen
     assert!(!grid.contains("Line 1\n"));
     assert!(!grid.contains("Line 20\n"));
-    // Lines 21, 22, 23, 24 are visible in top 4 rows of 6-row terminal grid
-    assert_buffer_contains(buffer, "Line 21");
-    assert_buffer_contains(buffer, "Line 22");
-    assert_buffer_contains(buffer, "Line 23");
-    assert_buffer_contains(buffer, "Line 24");
+    // Lines 115..118 are visible in 4-row terminal screen
+    assert_buffer_contains(buffer, "Line 115");
+    assert_buffer_contains(buffer, "Line 116");
+    assert_buffer_contains(buffer, "Line 117");
+    assert_buffer_contains(buffer, "Line 118");
 }
 
 #[test]

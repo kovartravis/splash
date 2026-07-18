@@ -18,14 +18,14 @@ fn test_multiline_regex_patterns() {
     let buffer = harness.render_frame();
 
     // Dot-all mode (?s) allowing . to match newlines across the buffer grid
-    assert_buffer_matches_regex(buffer, r"(?s)┌─+┐.*││Alpha\s+││.*││Beta\s+││.*└─+┘");
+    assert_buffer_matches_regex(buffer, r"(?s)┌─+┐.*││Alpha\s*││.*││\s*Beta\s*││.*└─+┘");
 
     // Multiline mode (?m) matching line start and line end anchors on intermediate lines
-    assert_buffer_matches_regex(buffer, r"(?m)^││Alpha\s+││$");
-    assert_buffer_matches_regex(buffer, r"(?m)^││Beta\s+││$");
+    assert_buffer_matches_regex(buffer, r"(?m)^││Alpha\s*││$");
+    assert_buffer_matches_regex(buffer, r"(?m)^││\s*Beta\s*││$");
 
     // Explicit newline matching in regex pattern
-    assert_buffer_matches_regex(buffer, r"Alpha\s+││\n││Beta");
+    assert_buffer_matches_regex(buffer, r"Alpha\s*││\n││\s*Beta");
 
     // Verify alias assert_buffer_matches works with multiline pattern
     assert_buffer_matches(buffer, r"(?s)Harness: bash.*Alpha.*Beta");

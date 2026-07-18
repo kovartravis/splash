@@ -3,16 +3,17 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
     Frame,
 };
+use vt100::Parser;
 
 use crate::leader::{KeyAction, LeaderState};
 use crate::pty::HarnessConfig;
 
-#[derive(Debug, Clone)]
 pub struct SplashApp {
     pub config: HarnessConfig,
     pub leader_state: LeaderState,
     pub raw_output: String,
     pub terminal_size: (u16, u16),
+    pub parser: Parser,
 }
 
 impl SplashApp {
@@ -22,19 +23,24 @@ impl SplashApp {
             leader_state: LeaderState::default(),
             raw_output: String::new(),
             terminal_size: (80, 24),
+            parser: Parser::new(24, 80, 1000),
         }
     }
 
     pub fn render(&mut self, frame: &mut Frame) {
-        let lines: Vec<&str> = self.raw_output.lines().collect();
-        let display_text = if lines.len() > 100 {
-            lines[lines.len() - 100..].join("\n")
-        } else {
-            self.raw_output.clone()
-        };
+        let rect = frame.size();
+        let inner_width = rect.width.saturating_sub(2).max(1);
+        let inner_height = rect.height.saturating_sub(2).max(1);
+        self.parser.set_size(inner_height, inner_width);
+
+        let screen = self.parser.screen();
+        let contents = screen.contents();
 
         let leader_active = self.leader_state.is_active();
-        let cmd_title = format!(" Harness: {} (Leader: Ctrl+B | Exit: Ctrl+B q) ", self.config.command);
+        let cmd_title = format!(
+            " Harness: {} (Leader: Ctrl+B | Exit: Ctrl+B q) ",
+            self.config.command
+        );
 
         let title = if leader_active {
             format!("{} [LEADER ACTIVE]", cmd_title)
@@ -42,9 +48,8 @@ impl SplashApp {
             cmd_title
         };
 
-        let rect = frame.size();
         let block = Block::default().title(title).borders(Borders::ALL);
-        let paragraph = Paragraph::new(display_text).block(block);
+        let paragraph = Paragraph::new(contents).block(block);
         frame.render_widget(paragraph, rect);
     }
 
@@ -54,10 +59,12 @@ impl SplashApp {
 
     pub fn push_output_chunk(&mut self, text: &str) {
         self.raw_output.push_str(text);
+        self.parser.process(text.as_bytes());
     }
 
     pub fn set_size(&mut self, width: u16, height: u16) {
         self.terminal_size = (width, height);
+        self.parser.set_size(height.max(1), width.max(1));
     }
 }
 
@@ -81,5 +88,23 @@ mod tests {
 
         app.set_size(120, 40);
         assert_eq!(app.terminal_size, (120, 40));
+    }
+
+    #[test]
+    fn test_vt100_parser_handles_carriage_returns_and_ansi_escape() {
+        let config = HarnessConfig {
+            command: "agy".to_string(),
+            args: vec![],
+        };
+        let mut app = SplashApp::new(config);
+
+        // Push text with carriage return (updating same line)
+        app.push_output_chunk("Loading 0%\rLoading 50%\rLoading 100%\nDone!");
+
+        let contents = app.parser.screen().contents();
+        assert!(contents.contains("Loading 100%"));
+        assert!(contents.contains("Done!"));
+        // Confirm intermediate "Loading 0%" was overwritten in 2D buffer
+        assert!(!contents.contains("Loading 0%"));
     }
 }

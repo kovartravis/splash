@@ -113,7 +113,7 @@ fn test_assert_snapshot_macro_exact_matching() {
         args: vec![],
     };
     let mut harness = TestHarness::new(75, 4, config);
-    harness.inject_pty_output("Line 1\nLine 2");
+    harness.inject_pty_output("Line 1\r\nLine 2");
 
     let expected_top_border = format!("┌{}┐", "─".repeat(75));
     let expected_bottom_border = format!("└{}┘", "─".repeat(75));

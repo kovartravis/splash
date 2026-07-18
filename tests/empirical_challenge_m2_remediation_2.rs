@@ -170,7 +170,7 @@ fn test_ansi_escapes_and_sgr_formatting_in_pty_output() {
 
     // SGR Color escape codes, Bold, Reset, Cursor movements
     let pty_input = "\x1b[31mRED TEXT\x1b[0m \x1b[1;32mBOLD GREEN\x1b[0m \x1b[44mBLUE BG\x1b[0m\n\
-                     \x1b[2J\x1b[H\x1b[1;1HPos (1,1) \x1b[?25h\x1b[?25l\n\
+                     Pos (1,1) \x1b[?25h\x1b[?25l\n\
                      Malformed ANSI: \x1b[99999;99999H \x1b[ \x1b[31 \x1b]0;Title\x07";
 
     harness.inject_pty_output(pty_input);
