@@ -134,15 +134,16 @@ fn test_snapshot_assertions_coverage() {
         command: "test".to_string(),
         args: vec![],
     };
-    // Height 3 -> total 5 lines in formatted grid
-    let mut harness = TestHarness::new(20, 3, config);
+    let mut harness = TestHarness::new(20, 5, config);
     harness.inject_pty_output("OK");
 
     let expected = vec![
         "┌────────────────────┐",
-        "│┌ Harness: test (Le┐│",
-        "││OK                ││",
-        "│└──────────────────┘│",
+        "│  [1: test]         │",
+        "│┌ F┐┌ Main Pane (Ha┐│",
+        "││(F││OK            ││",
+        "││  ││              ││",
+        "│└──┘└──────────────┘│",
         "└────────────────────┘",
     ];
 
@@ -152,7 +153,7 @@ fn test_snapshot_assertions_coverage() {
     // Test regex assertion aliases
     let buffer = harness.render_frame();
     assert_buffer_matches(buffer, r"OK");
-    assert_buffer_matches_regex(buffer, r"Harness:\s+test");
+    assert_buffer_matches_regex(buffer, r"Main Pane");
 }
 
 /// 8. EMPIRICAL CHALLENGE: Extreme buffer dimensions (0x0, 1x1, 500x1)

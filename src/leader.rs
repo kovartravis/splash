@@ -11,6 +11,9 @@ pub enum LeaderState {
 pub enum KeyAction {
     None,
     Quit,
+    FocusFileTree,
+    FocusMainPane,
+    SwitchTab(usize),
     Forward(Vec<u8>),
 }
 
@@ -38,6 +41,12 @@ impl LeaderState {
                 *self = LeaderState::Normal;
                 match key.code {
                     KeyCode::Char('q') | KeyCode::Char('Q') => KeyAction::Quit,
+                    KeyCode::Left => KeyAction::FocusFileTree,
+                    KeyCode::Right => KeyAction::FocusMainPane,
+                    KeyCode::Char(c @ '1'..='9') => {
+                        let idx = (c as usize) - ('1' as usize);
+                        KeyAction::SwitchTab(idx)
+                    }
                     KeyCode::Char('b') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                         KeyAction::Forward(vec![0x02])
                     }
@@ -97,4 +106,37 @@ mod tests {
         let key_q = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::empty());
         assert_eq!(leader.handle_key(&key_q), KeyAction::Quit);
     }
+
+    #[test]
+    fn test_leader_navigation_chords() {
+        let mut leader = LeaderState::default();
+
+        // Ctrl+B Left -> FocusFileTree
+        leader.handle_key(&KeyEvent::new(KeyCode::Char('b'), KeyModifiers::CONTROL));
+        assert_eq!(
+            leader.handle_key(&KeyEvent::new(KeyCode::Left, KeyModifiers::empty())),
+            KeyAction::FocusFileTree
+        );
+
+        // Ctrl+B Right -> FocusMainPane
+        leader.handle_key(&KeyEvent::new(KeyCode::Char('b'), KeyModifiers::CONTROL));
+        assert_eq!(
+            leader.handle_key(&KeyEvent::new(KeyCode::Right, KeyModifiers::empty())),
+            KeyAction::FocusMainPane
+        );
+
+        // Ctrl+B 1..9 -> SwitchTab
+        leader.handle_key(&KeyEvent::new(KeyCode::Char('b'), KeyModifiers::CONTROL));
+        assert_eq!(
+            leader.handle_key(&KeyEvent::new(KeyCode::Char('1'), KeyModifiers::empty())),
+            KeyAction::SwitchTab(0)
+        );
+
+        leader.handle_key(&KeyEvent::new(KeyCode::Char('b'), KeyModifiers::CONTROL));
+        assert_eq!(
+            leader.handle_key(&KeyEvent::new(KeyCode::Char('2'), KeyModifiers::empty())),
+            KeyAction::SwitchTab(1)
+        );
+    }
+
 }

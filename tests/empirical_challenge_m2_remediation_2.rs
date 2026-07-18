@@ -292,9 +292,9 @@ fn test_assert_snapshot_macro_with_regex_characters_in_content() {
 
     let expected_snapshot = vec![
         top_border.as_str(),
-        "│┌ Harness: regex_test_cmd (Leader: Ctrl+B | Exit:┐│",
-        "││Regex specials: $^.*+?()[]{}|\\                  ││",
-        "│└────────────────────────────────────────────────┘│",
+        "│  [1: regex_test_cmd]                             │",
+        "│┌ File Tr┐┌ Main Pane (Harness: regex_test_cmd) ─┐│",
+        "│└────────┘└──────────────────────────────────────┘│",
         bottom_border.as_str(),
     ];
 

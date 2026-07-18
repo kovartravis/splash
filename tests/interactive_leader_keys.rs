@@ -40,14 +40,14 @@ fn test_leader_activation_via_ctrl_b() {
     // Snapshot assertion on leader active frame (80x8 -> 10 formatted lines)
     let expected_lines = vec![
         "┌────────────────────────────────────────────────────────────────────────────────┐",
-        "│┌ Harness: test_cmd (Leader: Ctrl+B | Exit: Ctrl+B q)  [LEADER ACTIVE]─────────┐│",
-        "││                                                                              ││",
-        "││                                                                              ││",
-        "││                                                                              ││",
-        "││                                                                              ││",
-        "││                                                                              ││",
-        "││                                                                              ││",
-        "│└──────────────────────────────────────────────────────────────────────────────┘│",
+        "│  [1: test_cmd]                                                                 │",
+        "│┌ File Tree ───┐┌ Main Pane (Harness: test_cmd) [LEADER ACTIVE] ───────────────┐│",
+        "││(File tree pla││                                                              ││",
+        "││              ││                                                              ││",
+        "││              ││                                                              ││",
+        "││              ││                                                              ││",
+        "││              ││                                                              ││",
+        "│└──────────────┘└──────────────────────────────────────────────────────────────┘│",
         "└────────────────────────────────────────────────────────────────────────────────┘",
     ];
     assert_snapshot!(&mut harness, &expected_lines);
@@ -102,17 +102,17 @@ fn test_leader_shortcuts_c_quote_percent_esc() {
 
     // Verify buffer frame output after resetting to Normal (80x6 -> 8 formatted lines)
     let buffer = harness.render_frame();
-    assert_buffer_matches_regex(buffer, r"Harness:\s+test_cmd");
+    assert_buffer_matches_regex(buffer, r"Main Pane \(Harness:\s+test_cmd\)");
     assert!(!format_buffer_grid(buffer).contains("[LEADER ACTIVE]"));
 
     let expected_lines = vec![
         "┌────────────────────────────────────────────────────────────────────────────────┐",
-        "│┌ Harness: test_cmd (Leader: Ctrl+B | Exit: Ctrl+B q) ─────────────────────────┐│",
-        "││                                                                              ││",
-        "││                                                                              ││",
-        "││                                                                              ││",
-        "││                                                                              ││",
-        "│└──────────────────────────────────────────────────────────────────────────────┘│",
+        "│  [1: test_cmd]                                                                 │",
+        "│┌ File Tree ───┐┌ Main Pane (Harness: test_cmd) ───────────────────────────────┐│",
+        "││(File tree pla││                                                              ││",
+        "││              ││                                                              ││",
+        "││              ││                                                              ││",
+        "│└──────────────┘└──────────────────────────────────────────────────────────────┘│",
         "└────────────────────────────────────────────────────────────────────────────────┘",
     ];
     assert_snapshot!(&mut harness, &expected_lines);
@@ -157,13 +157,13 @@ fn test_leader_key_interactive_sequence() {
     // Verify snapshot frame displays [LEADER ACTIVE] (80x7 -> 9 formatted lines)
     let leader_active_lines = vec![
         "┌────────────────────────────────────────────────────────────────────────────────┐",
-        "│┌ Harness: test_cmd (Leader: Ctrl+B | Exit: Ctrl+B q)  [LEADER ACTIVE]─────────┐│",
-        "││                                                                              ││",
-        "││                                                                              ││",
-        "││                                                                              ││",
-        "││                                                                              ││",
-        "││                                                                              ││",
-        "│└──────────────────────────────────────────────────────────────────────────────┘│",
+        "│  [1: test_cmd]                                                                 │",
+        "│┌ File Tree ───┐┌ Main Pane (Harness: test_cmd) [LEADER ACTIVE] ───────────────┐│",
+        "││(File tree pla││                                                              ││",
+        "││              ││                                                              ││",
+        "││              ││                                                              ││",
+        "││              ││                                                              ││",
+        "│└──────────────┘└──────────────────────────────────────────────────────────────┘│",
         "└────────────────────────────────────────────────────────────────────────────────┘",
     ];
     assert_snapshot!(&mut harness, &leader_active_lines);

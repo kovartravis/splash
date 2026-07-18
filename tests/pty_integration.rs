@@ -43,12 +43,12 @@ fn test_pty_output_stream_injection_and_raw_accumulation() {
     // Verify snapshot grid formatting (60x6 -> 8 lines total)
     let expected_lines = vec![
         "┌────────────────────────────────────────────────────────────┐",
-        "│┌ Harness: pty_cmd (Leader: Ctrl+B | Exit: Ctrl+B q) ──────┐│",
-        "││Hello, Splash PTY!                                        ││",
-        "││Second line of output                                     ││",
-        "││Third line of output chunk                                ││",
-        "││                                                          ││",
-        "│└──────────────────────────────────────────────────────────┘│",
+        "│  [1: pty_cmd]                                              │",
+        "│┌ File Tree┐┌ Main Pane (Harness: pty_cmd) ────────────────┐│",
+        "││(File tree││Hello, Splash PTY!                            ││",
+        "││          ││Second line of output                         ││",
+        "││          ││Third line of output chunk                    ││",
+        "│└──────────┘└──────────────────────────────────────────────┘│",
         "└────────────────────────────────────────────────────────────┘",
     ];
     assert_snapshot!(&mut harness, &expected_lines);
@@ -96,16 +96,16 @@ fn test_terminal_layout_resize_100x30_and_40x10() {
     // Assert visual buffer grid correctness via snapshot on 40x10 layout (12 lines total)
     let expected_40x10 = vec![
         "┌────────────────────────────────────────┐",
-        "│┌ Harness: pty_cmd (Leader: Ctrl+B | Ex┐│",
-        "││PTY output line before resize         ││",
-        "││                                      ││",
-        "││                                      ││",
-        "││                                      ││",
-        "││                                      ││",
-        "││                                      ││",
-        "││                                      ││",
-        "││                                      ││",
-        "│└──────────────────────────────────────┘│",
+        "│  [1: pty_cmd]                          │",
+        "│┌ File ┐┌ Main Pane (Harness: pty_cmd) ┐│",
+        "││(File ││PTY output line before resize ││",
+        "││      ││                              ││",
+        "││      ││                              ││",
+        "││      ││                              ││",
+        "││      ││                              ││",
+        "││      ││                              ││",
+        "││      ││                              ││",
+        "│└──────┘└──────────────────────────────┘│",
         "└────────────────────────────────────────┘",
     ];
     assert_snapshot!(&mut harness, &expected_40x10);
@@ -126,18 +126,17 @@ fn test_pty_output_truncation_large_stream() {
     // Raw output has all 120 lines
     assert_eq!(harness.app.raw_output.lines().count(), 120);
 
-    // SplashApp::render truncates output to last 100 lines (lines 21..=120)
+    // SplashApp::render truncates output to fit 3 visible rows
     let buffer = harness.render_frame();
     let grid = format_buffer_grid(buffer);
 
     // Line 1 is scrolled off top and absent from screen
     assert!(!grid.contains("Line 1\n"));
     assert!(!grid.contains("Line 20\n"));
-    // Lines 115..118 are visible in 4-row terminal screen
+    // Lines 115..117 are visible in 3-row main pane inner area
     assert_buffer_contains(buffer, "Line 115");
     assert_buffer_contains(buffer, "Line 116");
     assert_buffer_contains(buffer, "Line 117");
-    assert_buffer_contains(buffer, "Line 118");
 }
 
 #[test]
@@ -160,13 +159,13 @@ fn test_pty_output_with_leader_active_and_resizing() {
 
     let expected_85x7 = vec![
         "┌─────────────────────────────────────────────────────────────────────────────────────┐",
-        "│┌ Harness: pty_cmd (Leader: Ctrl+B | Exit: Ctrl+B q)  [LEADER ACTIVE]───────────────┐│",
-        "││Active PTY session output                                                          ││",
-        "││                                                                                   ││",
-        "││                                                                                   ││",
-        "││                                                                                   ││",
-        "││                                                                                   ││",
-        "│└───────────────────────────────────────────────────────────────────────────────────┘│",
+        "│  [1: pty_cmd]                                                                       │",
+        "│┌ File Tree ────┐┌ Main Pane (Harness: pty_cmd) [LEADER ACTIVE] ────────────────────┐│",
+        "││(File tree plac││Active PTY session output                                         ││",
+        "││               ││                                                                  ││",
+        "││               ││                                                                  ││",
+        "││               ││                                                                  ││",
+        "│└───────────────┘└──────────────────────────────────────────────────────────────────┘│",
         "└─────────────────────────────────────────────────────────────────────────────────────┘",
     ];
     assert_snapshot!(&mut harness, &expected_85x7);

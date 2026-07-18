@@ -81,7 +81,7 @@ fn run_splash(config: HarnessConfig) -> Result<(), String> {
                     KeyAction::Forward(bytes) => {
                         harness.write(&bytes);
                     }
-                    KeyAction::None => {}
+                    _ => {}
                 }
             }
         }

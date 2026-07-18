@@ -36,11 +36,11 @@ fn test_snapshot_inspection_80x24_title_and_pty_output() {
     }
 
     // Verify title text and PTY output via assertion helpers
-    assert_buffer_contains(buffer, "Harness: bash");
+    assert_buffer_contains(buffer, "Main Pane (Harness: bash)");
     assert_buffer_contains(buffer, "Welcome to Splash Visual Harness!");
 
     // Verify regex matching helpers
-    assert_buffer_matches_regex(buffer, r"Harness:\s+bash");
+    assert_buffer_matches_regex(buffer, r"Main Pane \(Harness:\s+bash\)");
     assert_buffer_matches_regex(buffer, r"Welcome\s+to\s+Splash");
     assert_buffer_matches(buffer, r"┌─+┐");
 }
@@ -68,7 +68,7 @@ fn test_snapshot_inspection_120x40_custom_dimensions() {
     assert_eq!(lines[41], expected_bottom);
 
     // Assertions on content
-    assert_buffer_contains(buffer, "Harness: python3");
+    assert_buffer_contains(buffer, "Main Pane (Harness: python3)");
     assert_buffer_contains(buffer, "Python 3.12.0 interactive session");
     assert_buffer_contains(buffer, ">>> ");
 
@@ -88,7 +88,7 @@ fn test_snapshot_inspection_leader_active_indicator() {
     let buffer1 = harness.render_frame();
     let grid1 = format_buffer_grid(buffer1);
     assert!(!grid1.contains("[LEADER ACTIVE]"));
-    assert_buffer_contains(buffer1, "Harness: zsh");
+    assert_buffer_contains(buffer1, "Main Pane (Harness: zsh)");
 
     // Press Ctrl+B to activate leader state
     harness.press_ctrl('b');
@@ -120,10 +120,10 @@ fn test_assert_snapshot_macro_exact_matching() {
 
     let snapshot_lines = vec![
         expected_top_border.as_str(),
-        "│┌ Harness: sh (Leader: Ctrl+B | Exit: Ctrl+B q) ──────────────────────────┐│",
-        "││Line 1                                                                   ││",
-        "││Line 2                                                                   ││",
-        "│└─────────────────────────────────────────────────────────────────────────┘│",
+        "│  [1: sh]                                                                  │",
+        "│┌ File Tree ──┐┌ Main Pane (Harness: sh) ─────────────────────────────────┐│",
+        "││(File tree pl││Line 1                                                    ││",
+        "│└─────────────┘└──────────────────────────────────────────────────────────┘│",
         expected_bottom_border.as_str(),
     ];
 
@@ -133,10 +133,10 @@ fn test_assert_snapshot_macro_exact_matching() {
     harness.press_ctrl('b');
     let leader_snapshot_lines = vec![
         expected_top_border.as_str(),
-        "│┌ Harness: sh (Leader: Ctrl+B | Exit: Ctrl+B q)  [LEADER ACTIVE]──────────┐│",
-        "││Line 1                                                                   ││",
-        "││Line 2                                                                   ││",
-        "│└─────────────────────────────────────────────────────────────────────────┘│",
+        "│  [1: sh]                                                                  │",
+        "│┌ File Tree ──┐┌ Main Pane (Harness: sh) [LEADER ACTIVE] ─────────────────┐│",
+        "││(File tree pl││Line 1                                                    ││",
+        "│└─────────────┘└──────────────────────────────────────────────────────────┘│",
         expected_bottom_border.as_str(),
     ];
 

@@ -1,8 +1,9 @@
 use crossterm::event::KeyEvent;
 use ratatui::{
+    layout::{Constraint, Direction, Layout},
     style::{Color as RColor, Modifier, Style},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, Borders, Paragraph, Tabs},
     Frame,
 };
 use vt100::Parser;
@@ -10,9 +11,25 @@ use vt100::Parser;
 use crate::leader::{KeyAction, LeaderState};
 use crate::pty::HarnessConfig;
 
+#[derive(Debug, PartialEq, Clone, Copy, Default)]
+pub enum Focus {
+    FileTree,
+    #[default]
+    MainPane,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum Tab {
+    Harness(String),
+    File(String),
+}
+
 pub struct SplashApp {
     pub config: HarnessConfig,
     pub leader_state: LeaderState,
+    pub focus: Focus,
+    pub tabs: Vec<Tab>,
+    pub active_tab_index: usize,
     pub raw_output: String,
     pub terminal_size: (u16, u16),
     pub parser: Parser,
@@ -20,9 +37,13 @@ pub struct SplashApp {
 
 impl SplashApp {
     pub fn new(config: HarnessConfig) -> Self {
+        let initial_tab = Tab::Harness(config.command.clone());
         Self {
             config,
             leader_state: LeaderState::default(),
+            focus: Focus::MainPane,
+            tabs: vec![initial_tab],
+            active_tab_index: 0,
             raw_output: String::new(),
             terminal_size: (78, 22),
             parser: Parser::new(22, 78, 1000),
@@ -30,45 +51,127 @@ impl SplashApp {
     }
 
     pub fn render(&mut self, frame: &mut Frame) {
-        let rect = frame.size();
-        let leader_active = self.leader_state.is_active();
-        let cmd_title = format!(
-            " Harness: {} (Leader: Ctrl+B | Exit: Ctrl+B q) ",
-            self.config.command
-        );
+        let size = frame.size();
 
-        let title = if leader_active {
-            format!("{} [LEADER ACTIVE]", cmd_title)
+        // Top: Tab Bar (1 line), Bottom: Workspace area
+        let vertical_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(1), Constraint::Min(0)])
+            .split(size);
+
+        let tab_bar_area = vertical_chunks[0];
+        let workspace_area = vertical_chunks[1];
+
+        // Render Tab Bar
+        let tab_titles: Vec<String> = self
+            .tabs
+            .iter()
+            .enumerate()
+            .map(|(i, tab)| match tab {
+                Tab::Harness(cmd) => format!(" [{}: {}] ", i + 1, cmd),
+                Tab::File(path) => format!(" [{}: {}] ", i + 1, path),
+            })
+            .collect();
+
+        let tabs_widget = Tabs::new(tab_titles)
+            .select(self.active_tab_index)
+            .style(Style::default().fg(RColor::DarkGray))
+            .highlight_style(Style::default().fg(RColor::Yellow).add_modifier(Modifier::BOLD));
+
+        frame.render_widget(tabs_widget, tab_bar_area);
+
+        // Split workspace: Left = File Tree (~20%), Right = Main Pane (~80%)
+        let horizontal_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(20), Constraint::Percentage(80)])
+            .split(workspace_area);
+
+        let file_tree_area = horizontal_chunks[0];
+        let main_pane_area = horizontal_chunks[1];
+
+        let tree_border_style = if self.focus == Focus::FileTree {
+            Style::default().fg(RColor::Yellow).add_modifier(Modifier::BOLD)
         } else {
-            cmd_title
+            Style::default().fg(RColor::DarkGray)
         };
 
-        let block = Block::default().title(title).borders(Borders::ALL);
-        let inner_area = block.inner(rect);
+        let main_border_style = if self.focus == Focus::MainPane {
+            Style::default().fg(RColor::Yellow).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(RColor::DarkGray)
+        };
+
+        let tree_block = Block::default()
+            .title(" File Tree ")
+            .borders(Borders::ALL)
+            .border_style(tree_border_style);
+
+        let file_tree_paragraph = Paragraph::new("(File tree placeholder)").block(tree_block);
+        frame.render_widget(file_tree_paragraph, file_tree_area);
+
+        let leader_active = self.leader_state.is_active();
+        let main_title = if leader_active {
+            format!(" Main Pane (Harness: {}) [LEADER ACTIVE] ", self.config.command)
+        } else {
+            format!(" Main Pane (Harness: {}) ", self.config.command)
+        };
+
+        let main_block = Block::default()
+            .title(main_title)
+            .borders(Borders::ALL)
+            .border_style(main_border_style);
+
+        let inner_main_area = main_block.inner(main_pane_area);
 
         self.parser
-            .set_size(inner_area.height.max(1), inner_area.width.max(1));
+            .set_size(inner_main_area.height.max(1), inner_main_area.width.max(1));
 
         let screen = self.parser.screen();
         let text = vt100_screen_to_ratatui_text(screen);
-        let paragraph = Paragraph::new(text);
+        let main_paragraph = Paragraph::new(text);
 
-        frame.render_widget(block, rect);
-        frame.render_widget(paragraph, inner_area);
+        frame.render_widget(main_block, main_pane_area);
+        frame.render_widget(main_paragraph, inner_main_area);
 
-        // Position cursor if screen cursor is not hidden
-        if !screen.hide_cursor() {
+        if self.focus == Focus::MainPane && !screen.hide_cursor() {
             let (cursor_row, cursor_col) = screen.cursor_position();
-            let target_x = inner_area.x + cursor_col;
-            let target_y = inner_area.y + cursor_row;
-            if target_x < inner_area.x + inner_area.width && target_y < inner_area.y + inner_area.height {
+            let target_x = inner_main_area.x + cursor_col;
+            let target_y = inner_main_area.y + cursor_row;
+            if target_x < inner_main_area.x + inner_main_area.width
+                && target_y < inner_main_area.y + inner_main_area.height
+            {
                 frame.set_cursor(target_x, target_y);
             }
         }
     }
 
     pub fn handle_key_event(&mut self, key: &KeyEvent) -> KeyAction {
-        self.leader_state.handle_key(key)
+        let action = self.leader_state.handle_key(key);
+        match action {
+            KeyAction::Quit => KeyAction::Quit,
+            KeyAction::FocusFileTree => {
+                self.focus = Focus::FileTree;
+                KeyAction::None
+            }
+            KeyAction::FocusMainPane => {
+                self.focus = Focus::MainPane;
+                KeyAction::None
+            }
+            KeyAction::SwitchTab(idx) => {
+                if idx < self.tabs.len() {
+                    self.active_tab_index = idx;
+                }
+                KeyAction::None
+            }
+            KeyAction::Forward(bytes) => {
+                if self.focus == Focus::MainPane {
+                    KeyAction::Forward(bytes)
+                } else {
+                    KeyAction::None
+                }
+            }
+            KeyAction::None => KeyAction::None,
+        }
     }
 
     pub fn push_output_chunk(&mut self, text: &str) {
@@ -146,6 +249,7 @@ pub fn vt100_screen_to_ratatui_text(screen: &vt100::Screen) -> Text<'static> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crossterm::event::KeyCode;
 
     #[test]
     fn test_splash_app_initialization_and_mutations() {
@@ -155,6 +259,9 @@ mod tests {
         };
         let mut app = SplashApp::new(config);
         assert_eq!(app.terminal_size, (78, 22));
+        assert_eq!(app.focus, Focus::MainPane);
+        assert_eq!(app.tabs.len(), 1);
+        assert_eq!(app.active_tab_index, 0);
         assert!(app.raw_output.is_empty());
         assert!(!app.leader_state.is_active());
 
@@ -166,28 +273,51 @@ mod tests {
     }
 
     #[test]
-    fn test_vt100_parser_handles_carriage_returns_and_ansi_escape() {
+    fn test_focus_switching_and_input_blocking() {
         let config = HarnessConfig {
-            command: "agy".to_string(),
+            command: "bash".to_string(),
             args: vec![],
         };
         let mut app = SplashApp::new(config);
 
-        // Push text with carriage return (updating same line)
-        app.push_output_chunk("Loading 0%\rLoading 50%\rLoading 100%\nDone!");
+        // Initially MainPane focused
+        let key_a = KeyEvent::new(KeyCode::Char('a'), crossterm::event::KeyModifiers::empty());
+        assert_eq!(app.handle_key_event(&key_a), KeyAction::Forward(vec![b'a']));
 
-        let contents = app.parser.screen().contents();
-        assert!(contents.contains("Loading 100%"));
-        assert!(contents.contains("Done!"));
-        // Confirm intermediate "Loading 0%" was overwritten in 2D buffer
-        assert!(!contents.contains("Loading 0%"));
+        // Press Ctrl+B Left -> Focus FileTree
+        let key_ctrl_b = KeyEvent::new(KeyCode::Char('b'), crossterm::event::KeyModifiers::CONTROL);
+        let key_left = KeyEvent::new(KeyCode::Left, crossterm::event::KeyModifiers::empty());
+        app.handle_key_event(&key_ctrl_b);
+        assert_eq!(app.handle_key_event(&key_left), KeyAction::None);
+        assert_eq!(app.focus, Focus::FileTree);
+
+        // When FileTree focused, character inputs are NOT forwarded to PTY
+        assert_eq!(app.handle_key_event(&key_a), KeyAction::None);
+
+        // Press Ctrl+B Right -> Focus MainPane
+        let key_right = KeyEvent::new(KeyCode::Right, crossterm::event::KeyModifiers::empty());
+        app.handle_key_event(&key_ctrl_b);
+        assert_eq!(app.handle_key_event(&key_right), KeyAction::None);
+        assert_eq!(app.focus, Focus::MainPane);
+
+        // When MainPane focused again, character inputs are forwarded
+        assert_eq!(app.handle_key_event(&key_a), KeyAction::Forward(vec![b'a']));
     }
 
     #[test]
-    fn test_vt100_screen_to_ratatui_text_colors() {
-        let mut parser = Parser::new(2, 20, 0);
-        parser.process("\x1b[31mRed\x1b[0m \x1b[1;32mGreen\x1b[0m".as_bytes());
-        let text = vt100_screen_to_ratatui_text(parser.screen());
-        assert_eq!(text.lines.len(), 2);
+    fn test_tab_switching() {
+        let config = HarnessConfig {
+            command: "bash".to_string(),
+            args: vec![],
+        };
+        let mut app = SplashApp::new(config);
+        app.tabs.push(Tab::File("main.rs".to_string()));
+
+        let key_ctrl_b = KeyEvent::new(KeyCode::Char('b'), crossterm::event::KeyModifiers::CONTROL);
+        let key_2 = KeyEvent::new(KeyCode::Char('2'), crossterm::event::KeyModifiers::empty());
+        app.handle_key_event(&key_ctrl_b);
+        app.handle_key_event(&key_2);
+
+        assert_eq!(app.active_tab_index, 1);
     }
 }

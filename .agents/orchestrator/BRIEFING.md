@@ -73,12 +73,17 @@ Lead the execution of Splash headless visual test harness and snapshot validatio
 | Challenger 2 (M2 Fix) | teamwork_preview_challenger | M2 Stress Challenge 2 | completed | 4f137d17-6dcb-4e5a-b692-fe633217d0c0 |
 | Auditor (M2 Fix) | teamwork_preview_auditor | M2 Forensic Integrity Audit | completed | 58f86071-ab93-4833-b047-7616e6cfa34a |
 | Worker 4 | teamwork_preview_worker | M2 Coordinate Offset Fix | completed | 40cd9358-db38-4e46-b711-8b871940cee2 |
-| Worker 5 | teamwork_preview_worker | Milestone 3 Implementation | in-progress | f179a2a9-c5b1-4a89-be6a-6486f60f9907 |
+| Worker 5 | teamwork_preview_worker | Milestone 3 Implementation | completed | f179a2a9-c5b1-4a89-be6a-6486f60f9907 |
+| Reviewer 1 (M3) | teamwork_preview_reviewer | M3 Integration Review 1 | in-progress | 59db0a37-72ca-4f61-8861-6262645ced06 |
+| Reviewer 2 (M3) | teamwork_preview_reviewer | M3 Integration Review 2 | in-progress | 9bbff7c8-23d5-4fad-8e07-b4816af98a3f |
+| Challenger 1 (M3) | teamwork_preview_challenger | M3 Empirical Challenge 1 | in-progress | c3dfaa3c-5796-4bdf-bdba-3a576c6c095e |
+| Challenger 2 (M3) | teamwork_preview_challenger | M3 Stress Challenge 2 | in-progress | de540508-44a0-4052-8658-85cd81357ee7 |
+| Auditor (M3) | teamwork_preview_auditor | M3 Forensic Integrity Audit | in-progress | 4098e9ac-435e-4a9f-b7ed-0ae7d986d29c |
 
 ## Succession Status
 - Succession required: no
-- Spawn count: 8 / 16
-- Pending subagents: f179a2a9-c5b1-4a89-be6a-6486f60f9907
+- Spawn count: 13 / 16
+- Pending subagents: 59db0a37-72ca-4f61-8861-6262645ced06, 9bbff7c8-23d5-4fad-8e07-b4816af98a3f, c3dfaa3c-5796-4bdf-bdba-3a576c6c095e, de540508-44a0-4052-8658-85cd81357ee7, 4098e9ac-435e-4a9f-b7ed-0ae7d986d29c
 - Predecessor: Generation 1 (16 spawns)
 - Successor: none
 
