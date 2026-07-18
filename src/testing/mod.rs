@@ -26,6 +26,19 @@ impl TestHarness {
         Self { terminal, app }
     }
 
+    pub fn with_file_tree(
+        width: u16,
+        height: u16,
+        config: HarnessConfig,
+        file_tree: crate::tree::FileTree,
+    ) -> Self {
+        let backend = TestBackend::new(width, height);
+        let terminal = Terminal::new(backend).expect("Failed to create TestBackend terminal");
+        let mut app = SplashApp::with_file_tree(config, file_tree);
+        app.set_size(width, height);
+        Self { terminal, app }
+    }
+
     pub fn send_key(&mut self, code: KeyCode, modifiers: KeyModifiers) -> KeyAction {
         let key = KeyEvent::new(code, modifiers);
         self.app.handle_key_event(&key)

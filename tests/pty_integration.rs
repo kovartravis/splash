@@ -2,6 +2,8 @@ use splash::assert_snapshot;
 use splash::pty::HarnessConfig;
 use splash::testing::{assert_buffer_contains, format_buffer_grid, TestHarness};
 
+use splash::tree::FileTree;
+
 fn create_test_config() -> HarnessConfig {
     HarnessConfig {
         command: "pty_cmd".to_string(),
@@ -9,9 +11,16 @@ fn create_test_config() -> HarnessConfig {
     }
 }
 
+fn create_test_harness(width: u16, height: u16) -> TestHarness {
+    let temp_dir = std::env::temp_dir().join(format!("splash_pty_empty_tree_{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&temp_dir);
+    let empty_tree = FileTree::new(&temp_dir).unwrap();
+    TestHarness::with_file_tree(width, height, create_test_config(), empty_tree)
+}
+
 #[test]
 fn test_pty_output_stream_injection_and_raw_accumulation() {
-    let mut harness = TestHarness::new(60, 6, create_test_config());
+    let mut harness = create_test_harness(60, 6);
 
     // Initially raw_output is empty
     assert!(harness.app.raw_output.is_empty());
@@ -45,7 +54,7 @@ fn test_pty_output_stream_injection_and_raw_accumulation() {
         "┌────────────────────────────────────────────────────────────┐",
         "│  [1: pty_cmd]                                              │",
         "│┌ File Tree┐┌ Main Pane (Harness: pty_cmd) ────────────────┐│",
-        "││(File tree││Hello, Splash PTY!                            ││",
+        "││          ││Hello, Splash PTY!                            ││",
         "││          ││Second line of output                         ││",
         "││          ││Third line of output chunk                    ││",
         "│└──────────┘└──────────────────────────────────────────────┘│",
@@ -56,7 +65,7 @@ fn test_pty_output_stream_injection_and_raw_accumulation() {
 
 #[test]
 fn test_terminal_layout_resize_100x30_and_40x10() {
-    let mut harness = TestHarness::new(80, 24, create_test_config());
+    let mut harness = create_test_harness(80, 24);
     assert_eq!(harness.app.terminal_size, (80, 24));
 
     harness.inject_pty_output("PTY output line before resize");
@@ -98,7 +107,7 @@ fn test_terminal_layout_resize_100x30_and_40x10() {
         "┌────────────────────────────────────────┐",
         "│  [1: pty_cmd]                          │",
         "│┌ File ┐┌ Main Pane (Harness: pty_cmd) ┐│",
-        "││(File ││PTY output line before resize ││",
+        "││      ││PTY output line before resize ││",
         "││      ││                              ││",
         "││      ││                              ││",
         "││      ││                              ││",
@@ -113,7 +122,7 @@ fn test_terminal_layout_resize_100x30_and_40x10() {
 
 #[test]
 fn test_pty_output_truncation_large_stream() {
-    let mut harness = TestHarness::new(60, 6, create_test_config());
+    let mut harness = create_test_harness(60, 6);
 
     // Inject 120 lines of output
     let mut lines = Vec::new();
@@ -130,18 +139,61 @@ fn test_pty_output_truncation_large_stream() {
     let buffer = harness.render_frame();
     let grid = format_buffer_grid(buffer);
 
-    // Line 1 is scrolled off top and absent from screen
+    // The vt100 terminal with 3 visible rows scrolled all 120 lines through,
+    // so the last 3 lines shown on screen are 118, 119, 120.
     assert!(!grid.contains("Line 1\n"));
     assert!(!grid.contains("Line 20\n"));
-    // Lines 115..117 are visible in 3-row main pane inner area
-    assert_buffer_contains(buffer, "Line 115");
-    assert_buffer_contains(buffer, "Line 116");
-    assert_buffer_contains(buffer, "Line 117");
+    // Lines 118..120 are visible in the 3-row main pane inner area
+    assert_buffer_contains(buffer, "Line 118");
+    assert_buffer_contains(buffer, "Line 119");
+    assert_buffer_contains(buffer, "Line 120");
+}
+
+#[test]
+fn test_harness_content_does_not_overflow_pane_border() {
+    // Use a wide terminal to surface width-mismatch bugs.
+    // The file tree gets 20% of width; the main pane gets 80%.
+    // Content injected into the harness must never bleed past the right border.
+    let width = 120u16;
+    let height = 10u16;
+    let mut harness = create_test_harness(width, height);
+
+    // Inject a line that is exactly as wide as the full terminal — if the PTY
+    // is mis-sized (too wide) agy-style separator lines will overflow the border.
+    let wide_line: String = "─".repeat(width as usize);
+    harness.inject_pty_output(&wide_line);
+
+    let buffer = harness.render_frame();
+    let grid = format_buffer_grid(buffer);
+    let grid_lines: Vec<&str> = grid.lines().collect();
+
+    // The outer frame is width+2 chars wide (border chars on each side).
+    // Every row in the grid must be exactly that width — overflow would make rows longer.
+    let expected_row_len = (width + 2) as usize;
+    for (i, line) in grid_lines.iter().enumerate() {
+        let char_count = line.chars().count();
+        assert_eq!(
+            char_count, expected_row_len,
+            "Row {} has {} chars, expected {} — content overflowed pane border:\n{}",
+            i, char_count, expected_row_len, grid
+        );
+    }
+
+    // The right outer border column must be '│' on every content row
+    // (rows 2..height+1), confirming the border was not displaced by overflow.
+    for row in &grid_lines[2..=(height as usize)] {
+        let last_char = row.chars().last().unwrap_or(' ');
+        assert_eq!(
+            last_char, '│',
+            "Right border displaced on row — content overflow detected:\n{}",
+            grid
+        );
+    }
 }
 
 #[test]
 fn test_pty_output_with_leader_active_and_resizing() {
-    let mut harness = TestHarness::new(80, 6, create_test_config());
+    let mut harness = create_test_harness(80, 6);
 
     harness.inject_pty_output("Active PTY session output");
 
@@ -161,7 +213,7 @@ fn test_pty_output_with_leader_active_and_resizing() {
         "┌─────────────────────────────────────────────────────────────────────────────────────┐",
         "│  [1: pty_cmd]                                                                       │",
         "│┌ File Tree ────┐┌ Main Pane (Harness: pty_cmd) [LEADER ACTIVE] ────────────────────┐│",
-        "││(File tree plac││Active PTY session output                                         ││",
+        "││               ││Active PTY session output                                         ││",
         "││               ││                                                                  ││",
         "││               ││                                                                  ││",
         "││               ││                                                                  ││",

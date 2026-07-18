@@ -101,6 +101,10 @@ impl PtyHarness {
         let _ = self.writer.write_all(bytes);
         let _ = self.writer.flush();
     }
+
+    pub fn kill(&mut self) {
+        let _ = self.child.kill();
+    }
 }
 
 #[cfg(test)]

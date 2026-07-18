@@ -6,6 +6,8 @@ use splash::testing::{
     assert_buffer_contains, assert_buffer_matches_regex, format_buffer_grid, TestHarness,
 };
 
+use splash::tree::FileTree;
+
 fn create_test_config() -> HarnessConfig {
     HarnessConfig {
         command: "test_cmd".to_string(),
@@ -13,9 +15,16 @@ fn create_test_config() -> HarnessConfig {
     }
 }
 
+fn create_test_harness(width: u16, height: u16) -> TestHarness {
+    let temp_dir = std::env::temp_dir().join(format!("splash_empty_tree_{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&temp_dir);
+    let empty_tree = FileTree::new(&temp_dir).unwrap();
+    TestHarness::with_file_tree(width, height, create_test_config(), empty_tree)
+}
+
 #[test]
 fn test_leader_activation_via_ctrl_b() {
-    let mut harness = TestHarness::new(80, 8, create_test_config());
+    let mut harness = create_test_harness(80, 8);
 
     // Initially leader state is Normal
     assert_eq!(harness.app.leader_state, LeaderState::Normal);
@@ -42,7 +51,7 @@ fn test_leader_activation_via_ctrl_b() {
         "┌────────────────────────────────────────────────────────────────────────────────┐",
         "│  [1: test_cmd]                                                                 │",
         "│┌ File Tree ───┐┌ Main Pane (Harness: test_cmd) [LEADER ACTIVE] ───────────────┐│",
-        "││(File tree pla││                                                              ││",
+        "││              ││                                                              ││",
         "││              ││                                                              ││",
         "││              ││                                                              ││",
         "││              ││                                                              ││",
@@ -66,7 +75,7 @@ fn test_leader_activation_via_ctrl_b() {
 
 #[test]
 fn test_leader_shortcuts_c_quote_percent_esc() {
-    let mut harness = TestHarness::new(80, 6, create_test_config());
+    let mut harness = create_test_harness(80, 6);
 
     // Shortcut 'c'
     harness.press_ctrl('b');
@@ -109,7 +118,7 @@ fn test_leader_shortcuts_c_quote_percent_esc() {
         "┌────────────────────────────────────────────────────────────────────────────────┐",
         "│  [1: test_cmd]                                                                 │",
         "│┌ File Tree ───┐┌ Main Pane (Harness: test_cmd) ───────────────────────────────┐│",
-        "││(File tree pla││                                                              ││",
+        "││              ││                                                              ││",
         "││              ││                                                              ││",
         "││              ││                                                              ││",
         "│└──────────────┘└──────────────────────────────────────────────────────────────┘│",
@@ -120,7 +129,7 @@ fn test_leader_shortcuts_c_quote_percent_esc() {
 
 #[test]
 fn test_leader_shortcut_quit_actions() {
-    let mut harness = TestHarness::new(80, 6, create_test_config());
+    let mut harness = create_test_harness(80, 6);
 
     // Press Ctrl+B then 'q' -> KeyAction::Quit
     harness.press_ctrl('b');
@@ -141,7 +150,7 @@ fn test_leader_shortcut_quit_actions() {
 
 #[test]
 fn test_leader_key_interactive_sequence() {
-    let mut harness = TestHarness::new(80, 7, create_test_config());
+    let mut harness = create_test_harness(80, 7);
 
     // 1. Send normal characters (forwarded to PTY)
     let action_a = harness.press_char('a');
@@ -159,7 +168,7 @@ fn test_leader_key_interactive_sequence() {
         "┌────────────────────────────────────────────────────────────────────────────────┐",
         "│  [1: test_cmd]                                                                 │",
         "│┌ File Tree ───┐┌ Main Pane (Harness: test_cmd) [LEADER ACTIVE] ───────────────┐│",
-        "││(File tree pla││                                                              ││",
+        "││              ││                                                              ││",
         "││              ││                                                              ││",
         "││              ││                                                              ││",
         "││              ││                                                              ││",

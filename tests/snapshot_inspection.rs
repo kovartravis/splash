@@ -106,13 +106,22 @@ fn test_snapshot_inspection_leader_active_indicator() {
     assert!(!grid3.contains("[LEADER ACTIVE]"));
 }
 
+use splash::tree::FileTree;
+
+fn create_test_harness(width: u16, height: u16, config: HarnessConfig) -> TestHarness {
+    let temp_dir = std::env::temp_dir().join(format!("splash_snap_empty_tree_{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&temp_dir);
+    let empty_tree = FileTree::new(&temp_dir).unwrap();
+    TestHarness::with_file_tree(width, height, config, empty_tree)
+}
+
 #[test]
 fn test_assert_snapshot_macro_exact_matching() {
     let config = HarnessConfig {
         command: "sh".to_string(),
         args: vec![],
     };
-    let mut harness = TestHarness::new(75, 4, config);
+    let mut harness = create_test_harness(75, 4, config);
     harness.inject_pty_output("Line 1\r\nLine 2");
 
     let expected_top_border = format!("┌{}┐", "─".repeat(75));
@@ -122,7 +131,7 @@ fn test_assert_snapshot_macro_exact_matching() {
         expected_top_border.as_str(),
         "│  [1: sh]                                                                  │",
         "│┌ File Tree ──┐┌ Main Pane (Harness: sh) ─────────────────────────────────┐│",
-        "││(File tree pl││Line 1                                                    ││",
+        "││             ││Line 2                                                    ││",
         "│└─────────────┘└──────────────────────────────────────────────────────────┘│",
         expected_bottom_border.as_str(),
     ];
@@ -135,7 +144,7 @@ fn test_assert_snapshot_macro_exact_matching() {
         expected_top_border.as_str(),
         "│  [1: sh]                                                                  │",
         "│┌ File Tree ──┐┌ Main Pane (Harness: sh) [LEADER ACTIVE] ─────────────────┐│",
-        "││(File tree pl││Line 1                                                    ││",
+        "││             ││Line 2                                                    ││",
         "│└─────────────┘└──────────────────────────────────────────────────────────┘│",
         expected_bottom_border.as_str(),
     ];

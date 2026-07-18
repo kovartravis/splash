@@ -14,6 +14,8 @@ pub enum KeyAction {
     FocusFileTree,
     FocusMainPane,
     SwitchTab(usize),
+    CloseTab,
+    OpenLauncher,
     Forward(Vec<u8>),
 }
 
@@ -41,6 +43,8 @@ impl LeaderState {
                 *self = LeaderState::Normal;
                 match key.code {
                     KeyCode::Char('q') | KeyCode::Char('Q') => KeyAction::Quit,
+                    KeyCode::Char('w') | KeyCode::Char('W') => KeyAction::CloseTab,
+                    KeyCode::Char('h') | KeyCode::Char('H') => KeyAction::OpenLauncher,
                     KeyCode::Left => KeyAction::FocusFileTree,
                     KeyCode::Right => KeyAction::FocusMainPane,
                     KeyCode::Char(c @ '1'..='9') => {
@@ -139,4 +143,23 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_leader_ctrl_b_w_close_tab() {
+        let mut leader = LeaderState::default();
+        leader.handle_key(&KeyEvent::new(KeyCode::Char('b'), KeyModifiers::CONTROL));
+        assert_eq!(
+            leader.handle_key(&KeyEvent::new(KeyCode::Char('w'), KeyModifiers::empty())),
+            KeyAction::CloseTab
+        );
+    }
+
+    #[test]
+    fn test_leader_ctrl_b_h_open_launcher() {
+        let mut leader = LeaderState::default();
+        leader.handle_key(&KeyEvent::new(KeyCode::Char('b'), KeyModifiers::CONTROL));
+        assert_eq!(
+            leader.handle_key(&KeyEvent::new(KeyCode::Char('h'), KeyModifiers::empty())),
+            KeyAction::OpenLauncher
+        );
+    }
 }

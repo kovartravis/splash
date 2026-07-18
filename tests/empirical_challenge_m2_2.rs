@@ -104,8 +104,8 @@ fn test_state_toggling_snapshot_diffs() {
         top_border.as_str(),
         "│  [1: zsh]                                                                      │",
         "│┌ File Tree ───┐┌ Main Pane (Harness: zsh) ────────────────────────────────────┐│",
-        "││(File tree pla││                                                              ││",
-        "││              ││                                                              ││",
+        "││▶ .agents     ││                                                              ││",
+        "││▶ .git        ││                                                              ││",
         "│└──────────────┘└──────────────────────────────────────────────────────────────┘│",
         bottom_border.as_str(),
     ];
@@ -117,8 +117,8 @@ fn test_state_toggling_snapshot_diffs() {
         top_border.as_str(),
         "│  [1: zsh]                                                                      │",
         "│┌ File Tree ───┐┌ Main Pane (Harness: zsh) [LEADER ACTIVE] ────────────────────┐│",
-        "││(File tree pla││                                                              ││",
-        "││              ││                                                              ││",
+        "││▶ .agents     ││                                                              ││",
+        "││▶ .git        ││                                                              ││",
         "│└──────────────┘└──────────────────────────────────────────────────────────────┘│",
         bottom_border.as_str(),
     ];
@@ -130,8 +130,8 @@ fn test_state_toggling_snapshot_diffs() {
         top_border.as_str(),
         "│  [1: zsh]                                                                      │",
         "│┌ File Tree ───┐┌ Main Pane (Harness: zsh) [LEADER ACTIVE] ────────────────────┐│",
-        "││(File tree pla││Prompt> hello                                                 ││",
-        "││              ││                                                              ││",
+        "││▶ .agents     ││Prompt> hello                                                 ││",
+        "││▶ .git        ││                                                              ││",
         "│└──────────────┘└──────────────────────────────────────────────────────────────┘│",
         bottom_border.as_str(),
     ];
@@ -143,8 +143,8 @@ fn test_state_toggling_snapshot_diffs() {
         top_border.as_str(),
         "│  [1: zsh]                                                                      │",
         "│┌ File Tree ───┐┌ Main Pane (Harness: zsh) ────────────────────────────────────┐│",
-        "││(File tree pla││Prompt> hello                                                 ││",
-        "││              ││                                                              ││",
+        "││▶ .agents     ││Prompt> hello                                                 ││",
+        "││▶ .git        ││                                                              ││",
         "│└──────────────┘└──────────────────────────────────────────────────────────────┘│",
         bottom_border.as_str(),
     ];
