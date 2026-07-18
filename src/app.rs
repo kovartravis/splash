@@ -22,20 +22,13 @@ impl SplashApp {
             config,
             leader_state: LeaderState::default(),
             raw_output: String::new(),
-            terminal_size: (80, 24),
-            parser: Parser::new(24, 80, 1000),
+            terminal_size: (78, 22),
+            parser: Parser::new(22, 78, 1000),
         }
     }
 
     pub fn render(&mut self, frame: &mut Frame) {
         let rect = frame.size();
-        let inner_width = rect.width.saturating_sub(2).max(1);
-        let inner_height = rect.height.saturating_sub(2).max(1);
-        self.parser.set_size(inner_height, inner_width);
-
-        let screen = self.parser.screen();
-        let contents = screen.contents();
-
         let leader_active = self.leader_state.is_active();
         let cmd_title = format!(
             " Harness: {} (Leader: Ctrl+B | Exit: Ctrl+B q) ",
@@ -49,8 +42,18 @@ impl SplashApp {
         };
 
         let block = Block::default().title(title).borders(Borders::ALL);
-        let paragraph = Paragraph::new(contents).block(block);
-        frame.render_widget(paragraph, rect);
+        let inner_area = block.inner(rect);
+
+        self.parser
+            .set_size(inner_area.height.max(1), inner_area.width.max(1));
+
+        let screen = self.parser.screen();
+        let contents = screen.contents();
+
+        let paragraph = Paragraph::new(contents);
+
+        frame.render_widget(block, rect);
+        frame.render_widget(paragraph, inner_area);
     }
 
     pub fn handle_key_event(&mut self, key: &KeyEvent) -> KeyAction {
@@ -79,7 +82,7 @@ mod tests {
             args: vec![],
         };
         let mut app = SplashApp::new(config);
-        assert_eq!(app.terminal_size, (80, 24));
+        assert_eq!(app.terminal_size, (78, 22));
         assert!(app.raw_output.is_empty());
         assert!(!app.leader_state.is_active());
 

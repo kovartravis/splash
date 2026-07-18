@@ -48,10 +48,12 @@ fn run_splash(config: HarnessConfig) -> Result<(), String> {
     let mut terminal = Terminal::new(backend).map_err(|e| e.to_string())?;
 
     let size = terminal.size().map_err(|e| e.to_string())?;
-    let mut harness = PtyHarness::spawn(&config, size.height, size.width)?;
+    let inner_width = size.width.saturating_sub(2).max(1);
+    let inner_height = size.height.saturating_sub(2).max(1);
 
+    let mut harness = PtyHarness::spawn(&config, inner_height, inner_width)?;
     let mut app = SplashApp::new(config);
-    app.set_size(size.width, size.height);
+    app.set_size(inner_width, inner_height);
 
     loop {
         // Drain incoming PTY output
@@ -62,8 +64,11 @@ fn run_splash(config: HarnessConfig) -> Result<(), String> {
         terminal
             .draw(|f| {
                 let rect = f.size();
-                harness.resize(rect.height, rect.width);
-                app.set_size(rect.width, rect.height);
+                let inner_w = rect.width.saturating_sub(2).max(1);
+                let inner_h = rect.height.saturating_sub(2).max(1);
+
+                harness.resize(inner_h, inner_w);
+                app.set_size(inner_w, inner_h);
                 app.render(f);
             })
             .map_err(|e| e.to_string())?;
