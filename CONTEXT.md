@@ -32,9 +32,13 @@ _Avoid_: project root, workspace
 The primary content area that shows either the active harness terminal or the active file tab. One view at a time — no splits.
 _Avoid_: editor area, content area, viewport
 
-**Command Palette**:
-The picker that appears when opening a new harness tab. Lists harnesses detected on `$PATH` and spawns the selected one in a new harness tab.
-_Avoid_: launcher, menu
+**Harness Launcher**:
+The input prompt mode (triggered via `Ctrl+B h`) where the user types a harness command (e.g. `agy`, `claude`, `bash`) to spawn a new harness process and open a new Harness Tab.
+_Avoid_: launcher prompt, command bar
+
+**Empty Workspace**:
+The state when no tabs are open in Splash. Displays a clear message in the Main Pane with guidance to launch a harness or open a file.
+_Avoid_: blank screen, null state
 
 **Disk Conflict**:
 The state when a file tab has unsaved edits and the underlying file has been modified on disk (typically by the active harness). Splash warns the user rather than silently overwriting either copy.
