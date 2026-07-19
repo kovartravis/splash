@@ -191,6 +191,7 @@ pub struct SplashApp {
     pub parser: Parser,
     pub file_tree: FileTree,
     pub launcher_input: Option<String>,
+    pub file_events_rx: Option<std::sync::mpsc::Receiver<Vec<PathBuf>>>,
 }
 
 impl SplashApp {
@@ -201,6 +202,30 @@ impl SplashApp {
 
     pub fn with_file_tree(config: HarnessConfig, file_tree: FileTree) -> Self {
         let initial_tab = Tab::Harness(HarnessTab::new(config.command.clone()));
+        
+        let (tx, rx) = std::sync::mpsc::channel();
+        let tx_clone = tx.clone();
+        
+        std::thread::spawn(move || {
+            if let Ok(mut debouncer) = notify_debouncer_mini::new_debouncer(
+                std::time::Duration::from_millis(50),
+                move |res: notify_debouncer_mini::DebounceEventResult| {
+                    if let Ok(events) = res {
+                        let paths: Vec<_> = events.into_iter().map(|e| e.path).collect();
+                        let _ = tx_clone.send(paths);
+                    }
+                }
+            ) {
+                if let Ok(cwd) = std::env::current_dir() {
+                    if debouncer.watcher().watch(&cwd, notify_debouncer_mini::notify::RecursiveMode::Recursive).is_ok() {
+                        loop {
+                            std::thread::park();
+                        }
+                    }
+                }
+            }
+        });
+
         Self {
             config,
             leader_state: LeaderState::default(),
@@ -212,6 +237,7 @@ impl SplashApp {
             parser: Parser::new(22, 78, 1000),
             file_tree,
             launcher_input: None,
+            file_events_rx: Some(rx),
         }
     }
 
@@ -721,6 +747,25 @@ impl SplashApp {
         for tab in &mut self.tabs {
             if let Tab::Harness(harness_tab) = tab {
                 harness_tab.tick();
+            }
+        }
+        
+        if let Some(rx) = &self.file_events_rx {
+            while let Ok(paths) = rx.try_recv() {
+                println!("Tick received paths: {:?}", paths);
+                for path in paths {
+                    for tab in &mut self.tabs {
+                        if let Tab::File(file_tab) = tab {
+                            println!("Comparing to file_tab: {:?}", file_tab.path);
+                            let match_path = file_tab.path == path
+                                || std::fs::canonicalize(&file_tab.path).unwrap_or_else(|_| file_tab.path.clone()) 
+                                   == std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
+                            if match_path {
+                                let _ = file_tab.reload();
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -1523,6 +1568,45 @@ mod tests {
         let grid = format_buffer_grid(buffer);
         assert!(grid.contains("Harness Launcher"));
         assert!(grid.contains("> claude"));
+    }
+
+    #[test]
+    fn test_file_tab_auto_reload() {
+        let config = HarnessConfig {
+            command: "bash".to_string(),
+            args: vec![],
+        };
+        let mut app = SplashApp::new(config);
+        
+        let temp_dir = std::env::temp_dir().join("splash_test_auto_reload");
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        let file_path = temp_dir.join("test.txt");
+        std::fs::write(&file_path, "line 1\nline 2\nline 3\n").unwrap();
+        
+        app.open_or_focus_file(&file_path).unwrap();
+        
+        if let Tab::File(ref mut f) = app.tabs[1] {
+            f.scroll_offset = 2; // scroll to bottom
+        } else {
+            panic!("Expected File tab");
+        }
+        
+        // Mock a file change
+        std::fs::write(&file_path, "line 1\n").unwrap();
+        
+        let (tx, rx) = std::sync::mpsc::channel();
+        app.file_events_rx = Some(rx);
+        
+        tx.send(vec![file_path.clone()]).unwrap();
+        
+        app.tick();
+        
+        if let Tab::File(ref f) = app.tabs[1] {
+            assert_eq!(f.content, "line 1\n");
+            assert_eq!(f.scroll_offset, 0); // Should be clamped
+        } else {
+            panic!("Expected File tab");
+        }
     }
 }
 
