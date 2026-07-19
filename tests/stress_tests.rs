@@ -231,9 +231,11 @@ fn test_key_event_to_bytes_unmapped_keys() {
     println!("Arrow Left bytes: {:?}", left);
     println!("Arrow Right bytes: {:?}", right);
 
-    // Verify Arrow keys return empty bytes (BUG: arrow keys unmapped)
-    assert!(up.is_empty(), "Arrow Up should be unmapped currently");
-    assert!(down.is_empty(), "Arrow Down should be unmapped currently");
+    // Verify Arrow keys return correct ANSI sequences
+    assert_eq!(up, b"\x1b[A".to_vec(), "Arrow Up should be mapped to ANSI sequence");
+    assert_eq!(down, b"\x1b[B".to_vec(), "Arrow Down should be mapped to ANSI sequence");
+    assert_eq!(left, b"\x1b[D".to_vec(), "Arrow Left should be mapped to ANSI sequence");
+    assert_eq!(right, b"\x1b[C".to_vec(), "Arrow Right should be mapped to ANSI sequence");
 
     // Function keys
     let f1 = key_event_to_bytes(&crossterm::event::KeyEvent::new(KeyCode::F(1), KeyModifiers::empty()));

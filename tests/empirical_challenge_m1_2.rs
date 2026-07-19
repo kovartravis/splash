@@ -190,26 +190,26 @@ fn test_arrow_keys_and_escape_sequences() {
         },
     );
 
-    // Arrow keys are currently swallowed by key_event_to_bytes!
+    // Arrow keys are mapped to their standard ANSI escape sequences
     assert_eq!(
         harness.send_key(KeyCode::Up, KeyModifiers::empty()),
-        KeyAction::None
+        KeyAction::Forward(b"\x1b[A".to_vec())
     );
     assert_eq!(
         key_event_to_bytes(&KeyEvent::new(KeyCode::Up, KeyModifiers::empty())),
-        vec![]
+        b"\x1b[A".to_vec()
     );
     assert_eq!(
         harness.send_key(KeyCode::Down, KeyModifiers::empty()),
-        KeyAction::None
+        KeyAction::Forward(b"\x1b[B".to_vec())
     );
     assert_eq!(
         harness.send_key(KeyCode::Left, KeyModifiers::empty()),
-        KeyAction::None
+        KeyAction::Forward(b"\x1b[D".to_vec())
     );
     assert_eq!(
         harness.send_key(KeyCode::Right, KeyModifiers::empty()),
-        KeyAction::None
+        KeyAction::Forward(b"\x1b[C".to_vec())
     );
 
     // Home, End, PageUp, PageDown, Delete, Insert
