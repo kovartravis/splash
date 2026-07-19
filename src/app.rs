@@ -31,14 +31,13 @@ pub struct FileTab {
 
 impl FileTab {
     pub fn open(path: impl Into<PathBuf>) -> io::Result<Self> {
-        let path = path.into();
-        let bytes = std::fs::read(&path)?;
-        let content = String::from_utf8_lossy(&bytes).into_owned();
-        Ok(Self {
-            path,
-            content,
+        let mut tab = Self {
+            path: path.into(),
+            content: String::new(),
             scroll_offset: 0,
-        })
+        };
+        tab.reload()?;
+        Ok(tab)
     }
 
     pub fn reload(&mut self) -> io::Result<()> {
