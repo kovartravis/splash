@@ -999,6 +999,79 @@ impl SplashApp {
                             let response = tiny_http::Response::from_string(response_str)
                                 .with_header(tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap());
                             let _ = request.respond(response);
+                        } else if json["method"] == "tools/call" && json["params"]["name"] == "close_pane" {
+                            let args = &json["params"]["arguments"];
+                            let mut success = false;
+                            if let Some(pane_id) = args["pane_id"].as_u64() {
+                                let pane_id = pane_id as usize;
+                                for tab_idx in 0..self.tabs.len() {
+                                    if self.tabs[tab_idx].panes().iter().any(|p| p.id == pane_id) {
+                                        let original_pane = self.tabs[tab_idx].active_pane_id;
+                                        self.active_tab_index = tab_idx;
+                                        self.tabs[tab_idx].active_pane_id = pane_id;
+                                        self.close_active_pane();
+                                        if self.active_tab_index == tab_idx && self.tabs.len() > tab_idx {
+                                            if original_pane != pane_id && self.tabs[tab_idx].panes().iter().any(|p| p.id == original_pane) {
+                                                self.tabs[tab_idx].active_pane_id = original_pane;
+                                            }
+                                        }
+                                        success = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            let text = if success { "Pane closed successfully".to_string() } else { "Failed to close pane".to_string() };
+                            let response_json = serde_json::json!({
+                                "jsonrpc": "2.0",
+                                "id": json["id"],
+                                "result": { "content": [{ "type": "text", "text": text }] }
+                            });
+                            let response = tiny_http::Response::from_string(serde_json::to_string(&response_json).unwrap())
+                                .with_header(tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap());
+                            let _ = request.respond(response);
+                        } else if json["method"] == "tools/call" && json["params"]["name"] == "focus_pane" {
+                            let args = &json["params"]["arguments"];
+                            let mut success = false;
+                            if let Some(pane_id) = args["pane_id"].as_u64() {
+                                let pane_id = pane_id as usize;
+                                for tab_idx in 0..self.tabs.len() {
+                                    if self.tabs[tab_idx].panes().iter().any(|p| p.id == pane_id) {
+                                        self.active_tab_index = tab_idx;
+                                        self.tabs[tab_idx].active_pane_id = pane_id;
+                                        self.focus = Focus::MainPane;
+                                        success = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            let text = if success { "Pane focused successfully".to_string() } else { "Failed to focus pane".to_string() };
+                            let response_json = serde_json::json!({
+                                "jsonrpc": "2.0",
+                                "id": json["id"],
+                                "result": { "content": [{ "type": "text", "text": text }] }
+                            });
+                            let response = tiny_http::Response::from_string(serde_json::to_string(&response_json).unwrap())
+                                .with_header(tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap());
+                            let _ = request.respond(response);
+                        } else if json["method"] == "tools/call" && json["params"]["name"] == "switch_tab" {
+                            let args = &json["params"]["arguments"];
+                            let mut success = false;
+                            if let Some(tab_index) = args["tab_index"].as_u64() {
+                                let tab_index = tab_index as usize;
+                                if tab_index < self.tabs.len() {
+                                    self.active_tab_index = tab_index;
+                                    success = true;
+                                }
+                            }
+                            let text = if success { "Switched tab successfully".to_string() } else { "Failed to switch tab".to_string() };
+                            let response_json = serde_json::json!({
+                                "jsonrpc": "2.0",
+                                "id": json["id"],
+                                "result": { "content": [{ "type": "text", "text": text }] }
+                            });
+                            let response = tiny_http::Response::from_string(serde_json::to_string(&response_json).unwrap())
+                                .with_header(tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap());
+                            let _ = request.respond(response);
                         } else {
                             let _ = request.respond(tiny_http::Response::empty(404));
                         }
