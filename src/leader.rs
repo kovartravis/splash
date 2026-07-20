@@ -84,6 +84,10 @@ pub fn key_event_to_bytes(key: &KeyEvent) -> Vec<u8> {
             KeyCode::Backspace => vec![0x7f],
             KeyCode::Tab => vec![b'\t'],
             KeyCode::Esc => vec![0x1b],
+            KeyCode::Up => b"\x1b[A".to_vec(),
+            KeyCode::Down => b"\x1b[B".to_vec(),
+            KeyCode::Right => b"\x1b[C".to_vec(),
+            KeyCode::Left => b"\x1b[D".to_vec(),
             _ => vec![],
         }
     }
@@ -161,5 +165,13 @@ mod tests {
             leader.handle_key(&KeyEvent::new(KeyCode::Char('h'), KeyModifiers::empty())),
             KeyAction::OpenLauncher
         );
+    }
+
+    #[test]
+    fn test_key_event_to_bytes_arrow_keys() {
+        assert_eq!(key_event_to_bytes(&KeyEvent::new(KeyCode::Up, KeyModifiers::empty())), b"\x1b[A".to_vec());
+        assert_eq!(key_event_to_bytes(&KeyEvent::new(KeyCode::Down, KeyModifiers::empty())), b"\x1b[B".to_vec());
+        assert_eq!(key_event_to_bytes(&KeyEvent::new(KeyCode::Right, KeyModifiers::empty())), b"\x1b[C".to_vec());
+        assert_eq!(key_event_to_bytes(&KeyEvent::new(KeyCode::Left, KeyModifiers::empty())), b"\x1b[D".to_vec());
     }
 }
