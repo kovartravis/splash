@@ -175,9 +175,163 @@ impl HarnessTab {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum Tab {
+pub enum SplitDirection {
+    Horizontal,
+    Vertical,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum PaneContent {
     Harness(HarnessTab),
     File(FileTab),
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Pane {
+    pub id: usize,
+    pub content: PaneContent,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum PaneTree {
+    Leaf(Pane),
+    Split {
+        direction: SplitDirection,
+        left: Box<PaneTree>,
+        right: Box<PaneTree>,
+    },
+}
+
+impl PaneTree {
+    pub fn find_pane(&self, id: usize) -> Option<&Pane> {
+        match self {
+            PaneTree::Leaf(p) => if p.id == id { Some(p) } else { None },
+            PaneTree::Split { left, right, .. } => {
+                left.find_pane(id).or_else(|| right.find_pane(id))
+            }
+        }
+    }
+
+    pub fn find_pane_mut(&mut self, id: usize) -> Option<&mut Pane> {
+        match self {
+            PaneTree::Leaf(p) => if p.id == id { Some(p) } else { None },
+            PaneTree::Split { left, right, .. } => {
+                left.find_pane_mut(id).or_else(|| right.find_pane_mut(id))
+            }
+        }
+    }
+
+    pub fn split_pane(self, target_id: usize, direction: SplitDirection, new_pane: Pane) -> Self {
+        match self {
+            PaneTree::Leaf(p) => {
+                if p.id == target_id {
+                    PaneTree::Split {
+                        direction,
+                        left: Box::new(PaneTree::Leaf(p)),
+                        right: Box::new(PaneTree::Leaf(new_pane)),
+                    }
+                } else {
+                    PaneTree::Leaf(p)
+                }
+            }
+            PaneTree::Split { direction: d, left, right } => {
+                let left_has_target = left.find_pane(target_id).is_some();
+                if left_has_target {
+                    PaneTree::Split {
+                        direction: d,
+                        left: Box::new(left.split_pane(target_id, direction, new_pane)),
+                        right,
+                    }
+                } else {
+                    PaneTree::Split {
+                        direction: d,
+                        left,
+                        right: Box::new(right.split_pane(target_id, direction, new_pane)),
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn remove_pane(self, target_id: usize) -> (Option<Self>, Option<Pane>) {
+        match self {
+            PaneTree::Leaf(p) => {
+                if p.id == target_id { (None, Some(p)) } else { (Some(PaneTree::Leaf(p)), None) }
+            }
+            PaneTree::Split { direction, left, right } => {
+                let (left_res, left_removed) = left.remove_pane(target_id);
+                let (right_res, right_removed) = right.remove_pane(target_id);
+                let removed = left_removed.or(right_removed);
+                match (left_res, right_res) {
+                    (Some(l), Some(r)) => (Some(PaneTree::Split {
+                        direction,
+                        left: Box::new(l),
+                        right: Box::new(r),
+                    }), removed),
+                    (Some(l), None) => (Some(l), removed),
+                    (None, Some(r)) => (Some(r), removed),
+                    (None, None) => (None, removed),
+                }
+            }
+        }
+    }
+
+    pub fn iter(&self) -> Vec<&Pane> {
+        match self {
+            PaneTree::Leaf(p) => vec![p],
+            PaneTree::Split { left, right, .. } => {
+                let mut v = left.iter();
+                v.extend(right.iter());
+                v
+            }
+        }
+    }
+
+    pub fn iter_mut(&mut self) -> Vec<&mut Pane> {
+        match self {
+            PaneTree::Leaf(p) => vec![p],
+            PaneTree::Split { left, right, .. } => {
+                let mut v = left.iter_mut();
+                v.extend(right.iter_mut());
+                v
+            }
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Tab {
+    pub root: Option<PaneTree>,
+    pub active_pane_id: usize,
+    pub next_pane_id: usize,
+}
+
+impl Tab {
+    pub fn new(content: PaneContent) -> Self {
+        let pane = Pane { id: 0, content };
+        Self {
+            root: Some(PaneTree::Leaf(pane)),
+            active_pane_id: 0,
+            next_pane_id: 1,
+        }
+    }
+
+    pub fn panes(&self) -> Vec<&Pane> {
+        self.root.as_ref().map(|r| r.iter()).unwrap_or_default()
+    }
+
+    pub fn panes_mut(&mut self) -> Vec<&mut Pane> {
+        self.root.as_mut().map(|r| r.iter_mut()).unwrap_or_default()
+    }
+
+    pub fn active_pane(&self) -> Option<&Pane> {
+        self.root.as_ref().and_then(|r| r.find_pane(self.active_pane_id))
+    }
+
+    pub fn active_pane_mut(&mut self) -> Option<&mut Pane> {
+        let id = self.active_pane_id;
+        self.root.as_mut().and_then(|r| r.find_pane_mut(id))
+    }
 }
 
 pub struct SplashApp {
@@ -201,7 +355,7 @@ impl SplashApp {
     }
 
     pub fn with_file_tree(config: HarnessConfig, file_tree: FileTree) -> Self {
-        let initial_tab = Tab::Harness(HarnessTab::new(config.command.clone()));
+        let initial_tab = Tab::new(PaneContent::Harness(HarnessTab::new(config.command.clone())));
         
         let (tx, rx) = std::sync::mpsc::channel();
         let tx_clone = tx.clone();
@@ -246,8 +400,10 @@ impl SplashApp {
             return None;
         }
         let mut closed = self.tabs.remove(index);
-        if let Tab::Harness(ref mut harness_tab) = closed {
-            harness_tab.kill();
+        for pane in closed.panes_mut() {
+            if let PaneContent::Harness(ref mut harness_tab) = pane.content {
+                harness_tab.kill();
+            }
         }
 
         if self.tabs.is_empty() {
@@ -262,19 +418,74 @@ impl SplashApp {
         Some(closed)
     }
 
+    pub fn split_active_pane(&mut self, direction: SplitDirection, content: PaneContent) {
+        if self.tabs.is_empty() { return; }
+        let tab = &mut self.tabs[self.active_tab_index];
+        let next_id = tab.next_pane_id;
+        tab.next_pane_id += 1;
+        let active_id = tab.active_pane_id;
+        
+        let new_pane = Pane { id: next_id, content };
+        if let Some(root) = tab.root.take() {
+            tab.root = Some(root.split_pane(active_id, direction, new_pane));
+            tab.active_pane_id = next_id;
+        }
+    }
+
+    pub fn close_active_pane(&mut self) {
+        if self.tabs.is_empty() { return; }
+        
+        // Block to limit borrow lifetime
+        let should_close_tab = {
+            let tab = &mut self.tabs[self.active_tab_index];
+            let active_id = tab.active_pane_id;
+            
+            if let Some(root) = tab.root.take() {
+                let (new_root, removed_pane) = root.remove_pane(active_id);
+                
+                if let Some(mut pane) = removed_pane {
+                    if let PaneContent::Harness(ref mut h) = pane.content {
+                        h.kill();
+                    }
+                }
+                
+                tab.root = new_root;
+                if let Some(new_root) = &tab.root {
+                    if let Some(first_pane) = new_root.iter().first() {
+                        tab.active_pane_id = first_pane.id;
+                    }
+                    false
+                } else {
+                    true
+                }
+            } else {
+                true
+            }
+        };
+
+        if should_close_tab {
+            self.close_tab(self.active_tab_index);
+        }
+    }
+
     pub fn open_or_focus_file(&mut self, path: impl Into<PathBuf>) -> io::Result<()> {
         let path = path.into();
-        if let Some(index) = self.tabs.iter().position(|t| match t {
-            Tab::File(f) => f.path == path,
-            _ => false,
+        if let Some(index) = self.tabs.iter().position(|t| {
+            t.panes().iter().any(|p| {
+                if let PaneContent::File(f) = &p.content { f.path == path } else { false }
+            })
         }) {
-            if let Tab::File(ref mut f) = self.tabs[index] {
-                let _ = f.reload();
+            for pane in self.tabs[index].panes_mut() {
+                if let PaneContent::File(f) = &mut pane.content {
+                    if f.path == path {
+                        let _ = f.reload();
+                    }
+                }
             }
             self.active_tab_index = index;
         } else {
             let file_tab = FileTab::open(&path)?;
-            self.tabs.push(Tab::File(file_tab));
+            self.tabs.push(Tab::new(PaneContent::File(file_tab)));
             self.active_tab_index = self.tabs.len() - 1;
         }
         self.focus = Focus::MainPane;
@@ -298,9 +509,9 @@ impl SplashApp {
             .tabs
             .iter()
             .enumerate()
-            .map(|(i, tab)| match tab {
-                Tab::Harness(harness_tab) => format!(" [{}: {}] ", i + 1, harness_tab.command),
-                Tab::File(file_tab) => {
+            .map(|(i, tab)| match tab.active_pane().map(|p| &p.content) {
+                Some(PaneContent::Harness(harness_tab)) => format!(" [{}: {}] ", i + 1, harness_tab.command),
+                Some(PaneContent::File(file_tab)) => {
                     let display_name = file_tab
                         .path
                         .file_name()
@@ -308,6 +519,7 @@ impl SplashApp {
                         .unwrap_or_else(|| file_tab.path.to_string_lossy().to_string());
                     format!(" [{}: {}] ", i + 1, display_name)
                 }
+                None => format!(" [{}: Empty] ", i + 1),
             })
             .collect();
 
@@ -433,83 +645,10 @@ impl SplashApp {
             let leader_active = self.leader_state.is_active();
             let focus = self.focus;
             let active_tab = &mut self.tabs[self.active_tab_index];
-            match active_tab {
-                Tab::Harness(harness_tab) => {
-                    let main_title = if leader_active {
-                        format!(" Main Pane (Harness: {}) [LEADER ACTIVE] ", harness_tab.command)
-                    } else {
-                        format!(" Main Pane (Harness: {}) ", harness_tab.command)
-                    };
+            let active_pane_id = active_tab.active_pane_id;
 
-                    let main_block = Block::default()
-                        .title(main_title)
-                        .borders(Borders::ALL)
-                        .border_style(main_border_style);
-
-                    let inner_main_area = main_block.inner(main_pane_area);
-
-                    // Resize to exact inner dims from ratatui layout — dirty-tracked so
-                    // this only actually resizes (and sends SIGWINCH) when dims change.
-                    harness_tab.resize(inner_main_area.height, inner_main_area.width);
-
-                    if let Ok(parser) = harness_tab.parser.lock() {
-                        let screen = parser.screen();
-                        let text = vt100_screen_to_ratatui_text(screen);
-                        // Keep only the last visible rows to fit the inner pane height
-                        let total_lines = text.lines.len();
-                        let max_visible = inner_main_area.height as usize;
-                        let trimmed_text = if total_lines > max_visible {
-                            let start = total_lines - max_visible;
-                            let trimmed_lines = text.lines[start..].to_vec();
-                            Text::from(trimmed_lines)
-                        } else {
-                            // Use original text directly as it fits
-                            text
-                        };
-                        let main_paragraph = Paragraph::new(trimmed_text);
-
-                        frame.render_widget(main_block, main_pane_area);
-                        frame.render_widget(main_paragraph, inner_main_area);
-
-                        if focus == Focus::MainPane && !screen.hide_cursor() {
-                            let (cursor_row, cursor_col) = screen.cursor_position();
-                            let target_x = inner_main_area.x + cursor_col;
-                            let target_y = inner_main_area.y + cursor_row;
-                            if target_x < inner_main_area.x + inner_main_area.width
-                                && target_y < inner_main_area.y + inner_main_area.height
-                            {
-                                frame.set_cursor(target_x, target_y);
-                            }
-                        }
-                    }
-                }
-                Tab::File(file_tab) => {
-                    let display_name = file_tab
-                        .path
-                        .file_name()
-                        .map(|n| n.to_string_lossy().to_string())
-                        .unwrap_or_else(|| file_tab.path.to_string_lossy().to_string());
-
-                    let main_title = if leader_active {
-                        format!(" Main Pane (File: {}) [LEADER ACTIVE] ", display_name)
-                    } else {
-                        format!(" Main Pane (File: {}) ", display_name)
-                    };
-
-                    let main_block = Block::default()
-                        .title(main_title)
-                        .borders(Borders::ALL)
-                        .border_style(main_border_style);
-
-                    let inner_main_area = main_block.inner(main_pane_area);
-
-                    let paragraph = Paragraph::new(file_tab.content.as_str())
-                        .wrap(Wrap { trim: false })
-                        .scroll((file_tab.scroll_offset, 0));
-
-                    frame.render_widget(main_block, main_pane_area);
-                    frame.render_widget(paragraph, inner_main_area);
-                }
+            if let Some(ref mut tree) = active_tab.root {
+                render_pane_tree(frame, tree, main_pane_area, leader_active, focus, active_pane_id);
             }
         }
     }
@@ -571,7 +710,7 @@ impl SplashApp {
                                     let mut harness_tab = HarnessTab::with_args(cmd, args);
                                     harness_tab.spawn_pty(inner_height, inner_width);
 
-                                    self.tabs.push(Tab::Harness(harness_tab));
+                                    self.tabs.push(Tab::new(PaneContent::Harness(harness_tab)));
                                     self.active_tab_index = self.tabs.len() - 1;
                                     self.focus = Focus::MainPane;
                                 }
@@ -584,7 +723,7 @@ impl SplashApp {
                 } else if self.tabs.is_empty() {
                     KeyAction::None
                 } else if self.focus == Focus::MainPane {
-                    if let Tab::File(ref mut file_tab) = self.tabs[self.active_tab_index] {
+                    if let Some(PaneContent::File(file_tab)) = self.tabs[self.active_tab_index].active_pane_mut().map(|p| &mut p.content) {
                         if !self.leader_state.is_active() {
                             let inner_height = self.terminal_size.1.saturating_sub(3).max(1);
                             let half_page = (inner_height / 2).max(1);
@@ -610,7 +749,7 @@ impl SplashApp {
                             }
                         }
                         KeyAction::None
-                    } else if let Tab::Harness(harness_tab) = &self.tabs[self.active_tab_index] {
+                    } else if let Some(PaneContent::Harness(harness_tab)) = self.tabs[self.active_tab_index].active_pane().map(|p| &p.content) {
                         harness_tab.write(&bytes);
                         KeyAction::Forward(bytes)
                     } else {
@@ -674,7 +813,7 @@ impl SplashApp {
                                     let mut harness_tab = HarnessTab::with_args(cmd, args);
                                     harness_tab.spawn_pty(inner_height, inner_width);
 
-                                    self.tabs.push(Tab::Harness(harness_tab));
+                                    self.tabs.push(Tab::new(PaneContent::Harness(harness_tab)));
                                     self.active_tab_index = self.tabs.len() - 1;
                                     self.focus = Focus::MainPane;
                                 }
@@ -686,7 +825,7 @@ impl SplashApp {
                 } else if self.tabs.is_empty() {
                     // Empty workspace: no active tab key routing
                 } else if self.focus == Focus::MainPane {
-                    if let Tab::File(ref mut file_tab) = self.tabs[self.active_tab_index] {
+                    if let Some(PaneContent::File(file_tab)) = self.tabs[self.active_tab_index].active_pane_mut().map(|p| &mut p.content) {
                         if !self.leader_state.is_active() {
                             let inner_height = self.terminal_size.1.saturating_sub(3).max(1);
                             let half_page = (inner_height / 2).max(1);
@@ -745,23 +884,25 @@ impl SplashApp {
 
     pub fn tick(&mut self) {
         for tab in &mut self.tabs {
-            if let Tab::Harness(harness_tab) = tab {
-                harness_tab.tick();
+            for pane in tab.panes_mut() {
+                if let PaneContent::Harness(harness_tab) = &mut pane.content {
+                    harness_tab.tick();
+                }
             }
         }
         
         if let Some(rx) = &self.file_events_rx {
             while let Ok(paths) = rx.try_recv() {
-                println!("Tick received paths: {:?}", paths);
                 for path in paths {
                     for tab in &mut self.tabs {
-                        if let Tab::File(file_tab) = tab {
-                            println!("Comparing to file_tab: {:?}", file_tab.path);
+                        for pane in tab.panes_mut() {
+                            if let PaneContent::File(file_tab) = &mut pane.content {
                             let match_path = file_tab.path == path
                                 || std::fs::canonicalize(&file_tab.path).unwrap_or_else(|_| file_tab.path.clone()) 
                                    == std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
                             if match_path {
                                 let _ = file_tab.reload();
+                            }
                             }
                         }
                     }
@@ -773,7 +914,9 @@ impl SplashApp {
     pub fn push_output_chunk(&mut self, text: &str) {
         self.raw_output.push_str(text);
         self.parser.process(text.as_bytes());
-        if let Some(Tab::Harness(harness_tab)) = self.tabs.get_mut(self.active_tab_index) {
+        if let Some(harness_tab) = self.tabs.get_mut(self.active_tab_index)
+            .and_then(|t| t.active_pane_mut())
+            .and_then(|p| match &mut p.content { PaneContent::Harness(h) => Some(h), _ => None }) {
             if let Ok(mut parser) = harness_tab.parser.lock() {
                 parser.process(text.as_bytes());
             }
@@ -790,8 +933,10 @@ impl SplashApp {
         let main_pane_width = width * 80 / 100;
         let inner_width = main_pane_width.saturating_sub(2).max(1);
         for tab in &mut self.tabs {
-            if let Tab::Harness(harness_tab) = tab {
-                harness_tab.resize(inner_height, inner_width);
+            for pane in tab.panes_mut() {
+                if let PaneContent::Harness(harness_tab) = &mut pane.content {
+                    harness_tab.resize(inner_height, inner_width);
+                }
             }
         }
     }
@@ -860,6 +1005,115 @@ pub fn vt100_screen_to_ratatui_text(screen: &vt100::Screen) -> Text<'static> {
     }
 
     Text::from(lines)
+}
+
+fn render_pane_tree(
+    frame: &mut Frame,
+    tree: &mut PaneTree,
+    area: ratatui::layout::Rect,
+    leader_active: bool,
+    focus: Focus,
+    active_pane_id: usize,
+) {
+    match tree {
+        PaneTree::Split { direction, left, right } => {
+            let layout = ratatui::layout::Layout::default()
+                .direction(match direction {
+                    SplitDirection::Horizontal => ratatui::layout::Direction::Horizontal,
+                    SplitDirection::Vertical => ratatui::layout::Direction::Vertical,
+                })
+                .constraints([
+                    ratatui::layout::Constraint::Percentage(50),
+                    ratatui::layout::Constraint::Percentage(50),
+                ])
+                .split(area);
+            render_pane_tree(frame, left, layout[0], leader_active, focus, active_pane_id);
+            render_pane_tree(frame, right, layout[1], leader_active, focus, active_pane_id);
+        }
+        PaneTree::Leaf(pane) => {
+            let is_active = pane.id == active_pane_id;
+            let main_border_style = if focus == Focus::MainPane && is_active {
+                Style::default().fg(RColor::Yellow).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(RColor::DarkGray)
+            };
+            
+            match &mut pane.content {
+                PaneContent::Harness(harness_tab) => {
+                    let main_title = if leader_active && is_active {
+                        format!(" Main Pane (Harness: {}) [LEADER ACTIVE] ", harness_tab.command)
+                    } else {
+                        format!(" Main Pane (Harness: {}) ", harness_tab.command)
+                    };
+
+                    let main_block = Block::default()
+                        .title(main_title)
+                        .borders(Borders::ALL)
+                        .border_style(main_border_style);
+
+                    let inner_main_area = main_block.inner(area);
+
+                    harness_tab.resize(inner_main_area.height, inner_main_area.width);
+
+                    if let Ok(parser) = harness_tab.parser.lock() {
+                        let screen = parser.screen();
+                        let text = vt100_screen_to_ratatui_text(screen);
+                        let total_lines = text.lines.len();
+                        let max_visible = inner_main_area.height as usize;
+                        let trimmed_text = if total_lines > max_visible {
+                            let start = total_lines - max_visible;
+                            let trimmed_lines = text.lines[start..].to_vec();
+                            Text::from(trimmed_lines)
+                        } else {
+                            text
+                        };
+                        let main_paragraph = Paragraph::new(trimmed_text);
+
+                        frame.render_widget(main_block, area);
+                        frame.render_widget(main_paragraph, inner_main_area);
+
+                        if focus == Focus::MainPane && is_active && !screen.hide_cursor() {
+                            let (cursor_row, cursor_col) = screen.cursor_position();
+                            let target_x = inner_main_area.x + cursor_col;
+                            let target_y = inner_main_area.y + cursor_row;
+                            if target_x < inner_main_area.x + inner_main_area.width
+                                && target_y < inner_main_area.y + inner_main_area.height
+                            {
+                                frame.set_cursor(target_x, target_y);
+                            }
+                        }
+                    }
+                }
+                PaneContent::File(file_tab) => {
+                    let display_name = file_tab
+                        .path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_else(|| file_tab.path.to_string_lossy().to_string());
+
+                    let main_title = if leader_active && is_active {
+                        format!(" Main Pane (File: {}) [LEADER ACTIVE] ", display_name)
+                    } else {
+                        format!(" Main Pane (File: {}) ", display_name)
+                    };
+
+                    let main_block = Block::default()
+                        .title(main_title)
+                        .borders(Borders::ALL)
+                        .border_style(main_border_style);
+
+                    let inner_main_area = main_block.inner(area);
+
+                    let paragraph = Paragraph::new(file_tab.content.as_str())
+                        .wrap(Wrap { trim: false })
+                        .scroll((file_tab.scroll_offset, 0));
+
+                    frame.render_widget(main_block, area);
+                    frame.render_widget(paragraph, inner_main_area);
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1002,11 +1256,11 @@ mod tests {
             args: vec![],
         };
         let mut app = SplashApp::new(config);
-        app.tabs.push(Tab::File(FileTab {
+        app.tabs.push(Tab::new(PaneContent::File(FileTab {
             path: PathBuf::from("main.rs"),
             content: "fn main() {}".to_string(),
             scroll_offset: 0,
-        }));
+        })));
 
         let key_ctrl_b = KeyEvent::new(KeyCode::Char('b'), crossterm::event::KeyModifiers::CONTROL);
         let key_2 = KeyEvent::new(KeyCode::Char('2'), crossterm::event::KeyModifiers::empty());
@@ -1160,7 +1414,7 @@ mod tests {
         assert_eq!(app.tabs.len(), 2);
         assert_eq!(app.active_tab_index, 1);
 
-        if let Tab::File(ref file_tab) = app.tabs[1] {
+        if let PaneContent::File(file_tab) = &app.tabs[1].panes()[0].content {
             assert_eq!(file_tab.content, "Hello from sample file");
         } else {
             panic!("Expected Tab::File at index 1");
@@ -1207,7 +1461,7 @@ mod tests {
         assert_eq!(app.active_tab_index, 1);
         assert_eq!(app.focus, Focus::MainPane);
 
-        if let Tab::File(ref file_tab) = app.tabs[1] {
+        if let PaneContent::File(file_tab) = &app.tabs[1].panes()[0].content {
             assert_eq!(file_tab.content, "Disk Content Has Changed");
         } else {
             panic!("Expected Tab::File at index 1");
@@ -1227,11 +1481,11 @@ mod tests {
         };
         let mut app = SplashApp::new(config);
         let long_line = "This is a very long line of text that should wrap across multiple lines when rendered inside the MainPane of SplashApp.";
-        app.tabs.push(Tab::File(FileTab {
+        app.tabs.push(Tab::new(PaneContent::File(FileTab {
             path: PathBuf::from("long.txt"),
             content: long_line.to_string(),
             scroll_offset: 0,
-        }));
+        })));
         app.active_tab_index = 1;
 
         let backend = TestBackend::new(40, 10);
@@ -1268,11 +1522,11 @@ mod tests {
         };
         let mut app = SplashApp::new(config);
         let content = (1..=10).map(|i| format!("Line {}", i)).collect::<Vec<_>>().join("\n");
-        app.tabs.push(Tab::File(FileTab {
+        app.tabs.push(Tab::new(PaneContent::File(FileTab {
             path: PathBuf::from("lines.txt"),
             content,
             scroll_offset: 0,
-        }));
+        })));
         app.active_tab_index = 1;
         app.focus = Focus::MainPane;
 
@@ -1280,13 +1534,13 @@ mod tests {
         let key_up = KeyEvent::new(KeyCode::Up, crossterm::event::KeyModifiers::empty());
 
         // Initially scroll_offset is 0
-        if let Tab::File(ref f) = app.tabs[1] {
+        if let PaneContent::File(f) = &app.tabs[1].panes()[0].content {
             assert_eq!(f.scroll_offset, 0);
         }
 
         // Press Down key: scroll_offset becomes 1
         app.handle_key_event(&key_down);
-        if let Tab::File(ref f) = app.tabs[1] {
+        if let PaneContent::File(f) = &app.tabs[1].panes()[0].content {
             assert_eq!(f.scroll_offset, 1);
         } else {
             panic!("Expected Tab::File");
@@ -1294,13 +1548,13 @@ mod tests {
 
         // Press Up key: scroll_offset becomes 0
         app.handle_key_event(&key_up);
-        if let Tab::File(ref f) = app.tabs[1] {
+        if let PaneContent::File(f) = &app.tabs[1].panes()[0].content {
             assert_eq!(f.scroll_offset, 0);
         }
 
         // Press Up key at 0: remains 0 (clamped)
         app.handle_key_event(&key_up);
-        if let Tab::File(ref f) = app.tabs[1] {
+        if let PaneContent::File(f) = &app.tabs[1].panes()[0].content {
             assert_eq!(f.scroll_offset, 0);
         }
 
@@ -1308,7 +1562,7 @@ mod tests {
         for _ in 0..20 {
             app.handle_key_event(&key_down);
         }
-        if let Tab::File(ref f) = app.tabs[1] {
+        if let PaneContent::File(f) = &app.tabs[1].panes()[0].content {
             assert_eq!(f.scroll_offset, 9);
         }
     }
@@ -1323,11 +1577,11 @@ mod tests {
         // Terminal size is 78x22 -> inner main height is 22 - 1 (tab bar) - 2 (borders) = 19
         // half-screen height is 19 / 2 = 9
         let content = (1..=100).map(|i| format!("Line {}", i)).collect::<Vec<_>>().join("\n");
-        app.tabs.push(Tab::File(FileTab {
+        app.tabs.push(Tab::new(PaneContent::File(FileTab {
             path: PathBuf::from("big.txt"),
             content,
             scroll_offset: 0,
-        }));
+        })));
         app.active_tab_index = 1;
         app.focus = Focus::MainPane;
 
@@ -1336,7 +1590,7 @@ mod tests {
 
         // Press PageDown: scroll_offset increases by half-screen height (9)
         app.handle_key_event(&key_pgdn);
-        if let Tab::File(ref f) = app.tabs[1] {
+        if let PaneContent::File(f) = &app.tabs[1].panes()[0].content {
             assert_eq!(f.scroll_offset, 9);
         } else {
             panic!("Expected Tab::File");
@@ -1344,7 +1598,7 @@ mod tests {
 
         // Press PageUp: scroll_offset decreases by 9 back to 0
         app.handle_key_event(&key_pgup);
-        if let Tab::File(ref f) = app.tabs[1] {
+        if let PaneContent::File(f) = &app.tabs[1].panes()[0].content {
             assert_eq!(f.scroll_offset, 0);
         }
 
@@ -1352,7 +1606,7 @@ mod tests {
         for _ in 0..20 {
             app.handle_key_event(&key_pgdn);
         }
-        if let Tab::File(ref f) = app.tabs[1] {
+        if let PaneContent::File(f) = &app.tabs[1].panes()[0].content {
             assert_eq!(f.scroll_offset, 99);
         }
     }
@@ -1368,11 +1622,11 @@ mod tests {
         };
         let mut app = SplashApp::new(config);
         let content = "First Line\nSecond Line\nThird Line\nFourth Line\nFifth Line";
-        app.tabs.push(Tab::File(FileTab {
+        app.tabs.push(Tab::new(PaneContent::File(FileTab {
             path: PathBuf::from("scroll_render.txt"),
             content: content.to_string(),
             scroll_offset: 2,
-        }));
+        })));
         app.active_tab_index = 1;
 
         let backend = TestBackend::new(40, 10);
@@ -1394,16 +1648,16 @@ mod tests {
             args: vec![],
         };
         let mut app = SplashApp::new(config);
-        app.tabs.push(Tab::File(FileTab {
+        app.tabs.push(Tab::new(PaneContent::File(FileTab {
             path: PathBuf::from("a.txt"),
             content: "a".to_string(),
             scroll_offset: 0,
-        }));
-        app.tabs.push(Tab::File(FileTab {
+        })));
+        app.tabs.push(Tab::new(PaneContent::File(FileTab {
             path: PathBuf::from("b.txt"),
             content: "b".to_string(),
             scroll_offset: 0,
-        }));
+        })));
         app.active_tab_index = 2; // "b.txt"
 
         let key_ctrl_b = KeyEvent::new(KeyCode::Char('b'), crossterm::event::KeyModifiers::CONTROL);
@@ -1438,7 +1692,7 @@ mod tests {
         let harness_tab = HarnessTab::with_pty("echo", pty, 24, 80);
 
         let mut app = SplashApp::new(config);
-        app.tabs[0] = Tab::Harness(harness_tab);
+        app.tabs[0] = Tab::new(PaneContent::Harness(harness_tab));
 
         // Closing harness tab 0 triggers kill() on underlying pty
         let closed = app.close_tab(0);
@@ -1540,7 +1794,7 @@ mod tests {
         assert!(app.launcher_input.is_none());
         assert_eq!(app.tabs.len(), 2);
         assert_eq!(app.active_tab_index, 1);
-        if let Tab::Harness(ref h) = app.tabs[1] {
+        if let PaneContent::Harness(h) = &app.tabs[1].panes()[0].content {
             assert_eq!(h.command, "agy");
         } else {
             panic!("Expected Tab::Harness at index 1");
@@ -1585,7 +1839,7 @@ mod tests {
         
         app.open_or_focus_file(&file_path).unwrap();
         
-        if let Tab::File(ref mut f) = app.tabs[1] {
+        if let PaneContent::File(f) = &mut app.tabs[1].panes_mut()[0].content {
             f.scroll_offset = 2; // scroll to bottom
         } else {
             panic!("Expected File tab");
@@ -1601,7 +1855,7 @@ mod tests {
         
         app.tick();
         
-        if let Tab::File(ref f) = app.tabs[1] {
+        if let PaneContent::File(f) = &app.tabs[1].panes()[0].content {
             assert_eq!(f.content, "line 1\n");
             assert_eq!(f.scroll_offset, 0); // Should be clamped
         } else {

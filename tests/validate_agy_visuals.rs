@@ -4,6 +4,7 @@ use std::time::{Duration, Instant};
 use crossterm::event::{KeyCode, KeyModifiers};
 use splash::testing::snapshot::format_buffer_grid;
 use splash::{SplashApp, Tab};
+use splash::app::PaneContent;
 use splash::pty::HarnessConfig;
 
 fn drain_and_tick(app: &mut SplashApp, duration: Duration) {
@@ -33,7 +34,7 @@ fn test_validate_agy_visuals_and_typing() {
     // Spawn PTY on the first harness tab (agy)
     let inner_height = height.saturating_sub(3).max(1);
     let inner_width = width.saturating_sub(2).max(1);
-    if let Some(Tab::Harness(harness_tab)) = app.tabs.get_mut(0) {
+    if let Some(PaneContent::Harness(harness_tab)) = app.tabs.get_mut(0).and_then(|t| t.active_pane_mut()).map(|p| &mut p.content) {
         harness_tab.spawn_pty(inner_height, inner_width);
     }
 
