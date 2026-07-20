@@ -117,12 +117,12 @@ impl HarnessTab {
         }
     }
 
-    pub fn spawn_pty(&mut self, rows: u16, cols: u16) {
+    pub fn spawn_pty(&mut self, rows: u16, cols: u16, mcp_url: Option<&str>) {
         let config = HarnessConfig {
             command: self.command.clone(),
             args: self.args.clone(),
         };
-        if let Ok(pty) = PtyHarness::spawn(&config, rows, cols) {
+        if let Ok(pty) = PtyHarness::spawn(&config, rows, cols, mcp_url) {
             self.pty = Some(Arc::new(Mutex::new(pty)));
         }
     }
@@ -346,6 +346,8 @@ pub struct SplashApp {
     pub file_tree: FileTree,
     pub launcher_input: Option<String>,
     pub file_events_rx: Option<std::sync::mpsc::Receiver<Vec<PathBuf>>>,
+    pub mcp_server: Option<std::sync::Arc<tiny_http::Server>>,
+    pub mcp_url: Option<String>,
 }
 
 impl SplashApp {
@@ -380,6 +382,9 @@ impl SplashApp {
             }
         });
 
+        let mcp_server = tiny_http::Server::http("127.0.0.1:0").ok().map(std::sync::Arc::new);
+        let mcp_url = mcp_server.as_ref().map(|s| format!("http://127.0.0.1:{}", s.server_addr().to_ip().unwrap().port()));
+
         Self {
             config,
             leader_state: LeaderState::default(),
@@ -392,6 +397,8 @@ impl SplashApp {
             file_tree,
             launcher_input: None,
             file_events_rx: Some(rx),
+            mcp_server,
+            mcp_url,
         }
     }
 
@@ -708,7 +715,7 @@ impl SplashApp {
                                     let inner_width = self.terminal_size.0.saturating_sub(2).max(1);
 
                                     let mut harness_tab = HarnessTab::with_args(cmd, args);
-                                    harness_tab.spawn_pty(inner_height, inner_width);
+                                    harness_tab.spawn_pty(inner_height, inner_width, self.mcp_url.as_deref());
 
                                     self.tabs.push(Tab::new(PaneContent::Harness(harness_tab)));
                                     self.active_tab_index = self.tabs.len() - 1;
@@ -811,7 +818,7 @@ impl SplashApp {
                                     let inner_width = self.terminal_size.0.saturating_sub(2).max(1);
 
                                     let mut harness_tab = HarnessTab::with_args(cmd, args);
-                                    harness_tab.spawn_pty(inner_height, inner_width);
+                                    harness_tab.spawn_pty(inner_height, inner_width, self.mcp_url.as_deref());
 
                                     self.tabs.push(Tab::new(PaneContent::Harness(harness_tab)));
                                     self.active_tab_index = self.tabs.len() - 1;
@@ -883,9 +890,9 @@ impl SplashApp {
     }
 
     pub fn tick(&mut self) {
-        for tab in &mut self.tabs {
-            for pane in tab.panes_mut() {
-                if let PaneContent::Harness(harness_tab) = &mut pane.content {
+        for tab in &self.tabs {
+            for pane in tab.panes() {
+                if let PaneContent::Harness(ref harness_tab) = pane.content {
                     harness_tab.tick();
                 }
             }
@@ -894,19 +901,65 @@ impl SplashApp {
         if let Some(rx) = &self.file_events_rx {
             while let Ok(paths) = rx.try_recv() {
                 for path in paths {
-                    for tab in &mut self.tabs {
+                    for tab in self.tabs.iter_mut() {
                         for pane in tab.panes_mut() {
-                            if let PaneContent::File(file_tab) = &mut pane.content {
-                            let match_path = file_tab.path == path
-                                || std::fs::canonicalize(&file_tab.path).unwrap_or_else(|_| file_tab.path.clone()) 
-                                   == std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
-                            if match_path {
-                                let _ = file_tab.reload();
-                            }
+                            if let PaneContent::File(ref mut f) = pane.content {
+                                if f.path == path || std::fs::canonicalize(&f.path).unwrap_or_else(|_| f.path.clone()) == std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone()) {
+                                    let _ = f.reload();
+                                }
                             }
                         }
                     }
                 }
+            }
+        }
+
+        if let Some(server) = &self.mcp_server {
+            while let Ok(Some(mut request)) = server.try_recv() {
+                let mut content = String::new();
+                if request.as_reader().read_to_string(&mut content).is_ok() {
+                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                        if json["method"] == "tools/call" && json["params"]["name"] == "list_layout" {
+                            let mut tabs_json = Vec::new();
+                            for tab in &self.tabs {
+                                let mut panes_json = Vec::new();
+                                for pane in tab.panes() {
+                                    let content_type = match &pane.content {
+                                        PaneContent::Harness(h) => serde_json::json!({"type": "harness", "command": h.command, "args": h.args}),
+                                        PaneContent::File(f) => serde_json::json!({"type": "file", "path": f.path.to_string_lossy()}),
+                                    };
+                                    panes_json.push(serde_json::json!({
+                                        "id": pane.id,
+                                        "content": content_type
+                                    }));
+                                }
+                                tabs_json.push(serde_json::json!({
+                                    "active_pane_id": tab.active_pane_id,
+                                    "panes": panes_json
+                                }));
+                            }
+                            let layout_json = serde_json::json!({"tabs": tabs_json});
+                            
+                            let response_json = serde_json::json!({
+                                "jsonrpc": "2.0",
+                                "id": json["id"],
+                                "result": {
+                                    "content": [{
+                                        "type": "text",
+                                        "text": layout_json.to_string()
+                                    }]
+                                }
+                            });
+                            
+                            let response_str = response_json.to_string();
+                            let response = tiny_http::Response::from_string(response_str)
+                                .with_header(tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap());
+                            let _ = request.respond(response);
+                            continue;
+                        }
+                    }
+                }
+                let _ = request.respond(tiny_http::Response::from_string("Not Found").with_status_code(404));
             }
         }
     }
@@ -1688,7 +1741,7 @@ mod tests {
             command: "echo".to_string(),
             args: vec!["test".to_string()],
         };
-        let pty = PtyHarness::spawn(&config, 24, 80).unwrap();
+        let pty = PtyHarness::spawn(&config, 24, 80, None).unwrap();
         let harness_tab = HarnessTab::with_pty("echo", pty, 24, 80);
 
         let mut app = SplashApp::new(config);

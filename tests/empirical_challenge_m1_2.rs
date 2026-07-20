@@ -156,7 +156,7 @@ fn test_ctrl_chords() {
     // Ctrl+[ is traditional Escape (0x1B) in terminals
     let act_ctrl_bracket_left = harness.send_key(KeyCode::Char('['), KeyModifiers::CONTROL);
     assert_eq!(act_ctrl_bracket_left, KeyAction::None);
-    assert_eq!(key_event_to_bytes(&KeyEvent::new(KeyCode::Char('['), KeyModifiers::CONTROL)), vec![]);
+    assert_eq!(key_event_to_bytes(&KeyEvent::new(KeyCode::Char('['), KeyModifiers::CONTROL)), Vec::<u8>::new());
 
     // Ctrl+] (0x1D)
     let act_ctrl_bracket_right = harness.send_key(KeyCode::Char(']'), KeyModifiers::CONTROL);
@@ -197,7 +197,7 @@ fn test_arrow_keys_and_escape_sequences() {
     );
     assert_eq!(
         key_event_to_bytes(&KeyEvent::new(KeyCode::Up, KeyModifiers::empty())),
-        vec![]
+        Vec::<u8>::new()
     );
     assert_eq!(
         harness.send_key(KeyCode::Down, KeyModifiers::empty()),
