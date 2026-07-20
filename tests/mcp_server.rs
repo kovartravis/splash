@@ -1,3 +1,4 @@
+
 use splash::pty::HarnessConfig;
 use splash::testing::TestHarness;
 use splash::tree::FileTree;
@@ -9,6 +10,7 @@ fn test_mcp_server_and_list_layout() {
     let _ = std::fs::create_dir_all(&temp_dir);
     let empty_tree = FileTree::new(&temp_dir).unwrap();
     
+    // Command that prints the environment variable
     let config = HarnessConfig {
         command: "sh".to_string(),
         args: vec!["-c".to_string(), "echo MCP_URL=$SPLASH_MCP_URL".to_string()],
@@ -49,10 +51,11 @@ fn test_mcp_server_and_list_layout() {
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
     
+    // Set read timeout
     stream.set_read_timeout(Some(std::time::Duration::from_secs(1))).unwrap();
     
     let mut response = String::new();
-    let _ = stream.read_to_string(&mut response);
+    let _ = stream.read_to_string(&mut response); // May return Error(WouldBlock) when socket is closed or timeout, but we just want whatever was read
     
     let body = response.split("\r\n\r\n").nth(1).expect("Invalid HTTP response format");
     let res_json: Value = serde_json::from_str(body).expect("Response is not JSON");

@@ -890,9 +890,9 @@ impl SplashApp {
     }
 
     pub fn tick(&mut self) {
-        for tab in &mut self.tabs {
-            for pane in tab.panes_mut() {
-                if let PaneContent::Harness(harness_tab) = &mut pane.content {
+        for tab in &self.tabs {
+            for pane in tab.panes() {
+                if let PaneContent::Harness(ref harness_tab) = pane.content {
                     harness_tab.tick();
                 }
             }
@@ -901,15 +901,12 @@ impl SplashApp {
         if let Some(rx) = &self.file_events_rx {
             while let Ok(paths) = rx.try_recv() {
                 for path in paths {
-                    for tab in &mut self.tabs {
+                    for tab in self.tabs.iter_mut() {
                         for pane in tab.panes_mut() {
-                            if let PaneContent::File(file_tab) = &mut pane.content {
-                            let match_path = file_tab.path == path
-                                || std::fs::canonicalize(&file_tab.path).unwrap_or_else(|_| file_tab.path.clone()) 
-                                   == std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
-                            if match_path {
-                                let _ = file_tab.reload();
-                            }
+                            if let PaneContent::File(ref mut f) = pane.content {
+                                if f.path == path || std::fs::canonicalize(&f.path).unwrap_or_else(|_| f.path.clone()) == std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone()) {
+                                    let _ = f.reload();
+                                }
                             }
                         }
                     }
@@ -1005,8 +1002,10 @@ impl SplashApp {
                         } else {
                             let _ = request.respond(tiny_http::Response::empty(404));
                         }
+                        continue;
                     }
                 }
+                let _ = request.respond(tiny_http::Response::empty(404));
             }
         }
     }

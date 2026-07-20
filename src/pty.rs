@@ -43,11 +43,9 @@ impl PtyHarness {
 
         let mut cmd = CommandBuilder::new(&config.command);
         cmd.args(&config.args);
-        
         if let Some(url) = mcp_url {
             cmd.env("SPLASH_MCP_URL", url);
         }
-        
         if let Ok(cwd) = env::current_dir() {
             cmd.cwd(cwd);
         }
