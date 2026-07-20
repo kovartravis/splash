@@ -35,7 +35,7 @@ fn test_validate_agy_visuals_and_typing() {
     let inner_height = height.saturating_sub(3).max(1);
     let inner_width = width.saturating_sub(2).max(1);
     if let Some(PaneContent::Harness(harness_tab)) = app.tabs.get_mut(0).and_then(|t| t.active_pane_mut()).map(|p| &mut p.content) {
-        harness_tab.spawn_pty(inner_height, inner_width);
+        harness_tab.spawn_pty(inner_height, inner_width, None);
     }
 
     // Collect initial PTY output for 5 seconds via tick()

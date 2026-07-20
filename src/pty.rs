@@ -30,7 +30,7 @@ pub struct PtyHarness {
 }
 
 impl PtyHarness {
-    pub fn spawn(config: &HarnessConfig, rows: u16, cols: u16) -> Result<Self, String> {
+    pub fn spawn(config: &HarnessConfig, rows: u16, cols: u16, mcp_url: Option<&str>) -> Result<Self, String> {
         let pty_system = native_pty_system();
         let pty_pair = pty_system
             .openpty(PtySize {
@@ -43,6 +43,11 @@ impl PtyHarness {
 
         let mut cmd = CommandBuilder::new(&config.command);
         cmd.args(&config.args);
+        
+        if let Some(url) = mcp_url {
+            cmd.env("SPLASH_MCP_URL", url);
+        }
+        
         if let Ok(cwd) = env::current_dir() {
             cmd.cwd(cwd);
         }
@@ -145,7 +150,7 @@ mod tests {
             command: "echo".to_string(),
             args: vec!["hello_splash".to_string()],
         };
-        let harness = PtyHarness::spawn(&config, 24, 80).unwrap();
+        let harness = PtyHarness::spawn(&config, 24, 80, None).unwrap();
 
         // Wait for output from reader thread
         let mut output = String::new();

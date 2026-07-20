@@ -58,7 +58,7 @@ fn run_splash(config: HarnessConfig) -> Result<(), String> {
         let inner_width = (size.width * 80 / 100).saturating_sub(2).max(1);
         if let Some(active_pane) = tab.active_pane_mut() {
             if let splash::app::PaneContent::Harness(ref mut harness_tab) = active_pane.content {
-                harness_tab.spawn_pty(inner_height, inner_width);
+                harness_tab.spawn_pty(inner_height, inner_width, app.mcp_url.as_deref());
             }
         }
     }
