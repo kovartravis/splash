@@ -53,10 +53,14 @@ fn run_splash(config: HarnessConfig) -> Result<(), String> {
     app.set_size(size.width, size.height);
 
     // Spawn a PTY for the initial harness tab using the same geometry as set_size
-    if let Some(splash::Tab::Harness(harness_tab)) = app.tabs.get_mut(0) {
+    if let Some(tab) = app.tabs.get_mut(0) {
         let inner_height = size.height.saturating_sub(3).max(1);
         let inner_width = (size.width * 80 / 100).saturating_sub(2).max(1);
-        harness_tab.spawn_pty(inner_height, inner_width);
+        if let Some(active_pane) = tab.active_pane_mut() {
+            if let splash::app::PaneContent::Harness(ref mut harness_tab) = active_pane.content {
+                harness_tab.spawn_pty(inner_height, inner_width);
+            }
+        }
     }
 
     loop {
