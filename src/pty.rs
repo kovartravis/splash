@@ -42,10 +42,38 @@ impl PtyHarness {
             .map_err(|e| format!("Failed to open PTY: {}", e))?;
 
         let mut cmd = CommandBuilder::new(&config.command);
-        cmd.args(&config.args);
+        let mut final_args = config.args.clone();
+
         if let Some(url) = mcp_url {
             cmd.env("SPLASH_MCP_URL", url);
+            
+            let command_name = std::path::Path::new(&config.command)
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("");
+
+            match command_name {
+                "agy" => {
+                    final_args.push("--mcp-server".to_string());
+                    final_args.push(url.to_string());
+                }
+                "claude" => {
+                    let tmp_path = format!("/tmp/splash_claude_mcp_{}.json", std::process::id());
+                    // Create a valid Claude MCP config JSON
+                    let mcp_config = format!(
+                        r#"{{"mcpServers":{{"splash":{{"command":"curl","args":["-X","POST","{}"]}}}}}}"#,
+                        url
+                    );
+                    let _ = std::fs::write(&tmp_path, mcp_config);
+                    final_args.push("--mcp-config".to_string());
+                    final_args.push(tmp_path);
+                }
+                _ => {}
+            }
         }
+        
+        cmd.args(&final_args);
+        
         if let Ok(cwd) = env::current_dir() {
             cmd.cwd(cwd);
         }
@@ -164,5 +192,76 @@ mod tests {
         }
 
         assert!(output.contains("hello_splash"));
+    }
+
+    #[test]
+    fn test_pty_harness_spawn_agy_mcp_args() {
+        let temp_dir = std::env::temp_dir();
+        let mock_script = temp_dir.join(format!("agy_{}", std::process::id()));
+        // rename it to agy so it matches
+        let mock_script = temp_dir.join("agy");
+        std::fs::write(&mock_script, "#!/bin/sh\necho \"$@\"").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&mock_script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+
+        let config = HarnessConfig {
+            command: mock_script.to_str().unwrap().to_string(),
+            args: vec!["initial".to_string()],
+        };
+        
+        let mcp_url = "http://127.0.0.1:9999";
+        let harness = PtyHarness::spawn(&config, 24, 80, Some(mcp_url)).unwrap();
+        
+        let mut output = String::new();
+        let start = std::time::Instant::now();
+        while start.elapsed() < std::time::Duration::from_secs(3) {
+            if let Ok(chunk) = harness.output_rx.try_recv() {
+                output.push_str(&chunk);
+                if output.contains("--mcp-server") {
+                    break;
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        
+        assert!(output.contains(&format!("initial --mcp-server {}", mcp_url)));
+    }
+
+    #[test]
+    fn test_pty_harness_spawn_claude_mcp_args() {
+        let temp_dir = std::env::temp_dir();
+        let mock_script = temp_dir.join("claude");
+        std::fs::write(&mock_script, "#!/bin/sh\necho \"$@\"").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&mock_script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+
+        let config = HarnessConfig {
+            command: mock_script.to_str().unwrap().to_string(),
+            args: vec!["initial".to_string()],
+        };
+        
+        let mcp_url = "http://127.0.0.1:8888";
+        let harness = PtyHarness::spawn(&config, 24, 80, Some(mcp_url)).unwrap();
+        
+        let mut output = String::new();
+        let start = std::time::Instant::now();
+        while start.elapsed() < std::time::Duration::from_secs(3) {
+            if let Ok(chunk) = harness.output_rx.try_recv() {
+                output.push_str(&chunk);
+                if output.contains("--mcp-config") {
+                    break;
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        
+        assert!(output.contains("initial --mcp-config "));
+        assert!(output.contains("/tmp/splash_claude_mcp_"));
     }
 }
