@@ -8,16 +8,16 @@ Splash is an agent harness shell — a TUI that wraps out-of-the-box agent CLIs 
 An agent CLI process (e.g. `agy`, `claude`, `codex`) running inside Splash's terminal emulator. The harness is what does the coding.
 _Avoid_: agent, bot, assistant, session
 
-**Harness Tab**:
-A tab in the tab bar that hosts a live harness terminal. Distinguished from file tabs by a color-coded border (phase 1) and a working/idle status indicator (phase 2).
-_Avoid_: agent tab, terminal tab, session tab
+**Tab**:
+A top-level container in the tab bar representing a specific layout of one or more Panes. Its title dynamically reflects the currently active Pane.
+_Avoid_: workspace, window
 
-**File Tab**:
-A tab in the tab bar that hosts an editable view of a file from the working tree. Saves explicitly on `Ctrl+S`; auto-refreshes when the file changes on disk.
-_Avoid_: editor tab, buffer
+**Pane**:
+A subdivision of a Tab's Main Pane that hosts either a live harness terminal or an editable view of a file.
+_Avoid_: split, window, buffer
 
 **Tab Bar**:
-The horizontal strip at the top of the screen listing all open harness tabs and file tabs.
+The horizontal strip at the top of the screen listing all open tabs.
 _Avoid_: tab strip, header
 
 **File Tree**:
@@ -29,7 +29,7 @@ The directory Splash was launched from. The root anchor for the file tree and th
 _Avoid_: project root, workspace
 
 **Main Pane**:
-The primary content area that shows either the active harness terminal or the active file tab. One view at a time — no splits.
+The primary content area of a tab. It can be split horizontally or vertically into multiple sub-panes, allowing harnesses and files to be displayed side-by-side.
 _Avoid_: editor area, content area, viewport
 
 **Harness Launcher**:
@@ -41,12 +41,12 @@ The state when no tabs are open in Splash. Displays a clear message in the Main 
 _Avoid_: blank screen, null state
 
 **Disk Conflict**:
-The state when a file tab has unsaved edits and the underlying file has been modified on disk (typically by the active harness). Splash warns the user rather than silently overwriting either copy.
+The state when a file pane has unsaved edits and the underlying file has been modified on disk (typically by the active harness). Splash warns the user rather than silently overwriting either copy.
 _Avoid_: merge conflict, save conflict
 
 ## Editor phases
 
-The file tab editor evolves in three phases. The phase boundary is an implementation detail, not a domain concept:
+The file editor evolves in three phases. The phase boundary is an implementation detail, not a domain concept:
 
 - **Phase 1** — plain text buffer
 - **Phase 2** — syntax highlighting
