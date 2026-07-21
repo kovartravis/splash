@@ -20,14 +20,23 @@ fn main() {
         }
     };
 
-    // Set up panic hook to restore terminal if we panic
+    // Install signal handlers (SIGINT/SIGTERM) to clean up MCP config & restore terminal
+    let _ = ctrlc::set_handler(move || {
+        splash::McpConfigGuard::cleanup_all();
+        let _ = restore_terminal();
+        std::process::exit(130);
+    });
+
+    // Set up panic hook to clean up MCP config & restore terminal if we panic
     let default_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
+        splash::McpConfigGuard::cleanup_all();
         let _ = restore_terminal();
         default_hook(info);
     }));
 
     if let Err(e) = run_splash(config) {
+        splash::McpConfigGuard::cleanup_all();
         let _ = restore_terminal();
         eprintln!("Splash error: {}", e);
         std::process::exit(1);
