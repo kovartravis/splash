@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "splash": {
+      "args": [
+        "mcp-proxy",
+        "http://127.0.0.1:55965"
+      ],
+      "command": "/Users/Travis/Repos/splash/target/debug/deps/splash-444db302cc0841fc"
+    }
+  }
+}

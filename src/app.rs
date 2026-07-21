@@ -140,7 +140,8 @@ impl HarnessTab {
             command: self.command.clone(),
             args: self.args.clone(),
         };
-        if let Ok(pty) = PtyHarness::spawn(&config, rows, cols, mcp_url) {
+        let mcp_url = mcp_url;
+        if let Ok(pty) = PtyHarness::spawn(&config, rows, cols, mcp_url, None) {
             self.pty = Some(Arc::new(Mutex::new(pty)));
         }
     }
@@ -198,6 +199,15 @@ pub enum SplitDirection {
     Horizontal,
     Vertical,
 }
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum MoveDirection {
+    Up,
+    Down,
+    Left,
+    Right,
+}
+
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum PaneContent {
@@ -313,6 +323,64 @@ impl PaneTree {
                 let mut v = left.iter_mut();
                 v.extend(right.iter_mut());
                 v
+            }
+        }
+    }
+
+    pub fn first_pane_id(&self) -> usize {
+        match self {
+            PaneTree::Leaf(p) => p.id,
+            PaneTree::Split { left, .. } => left.first_pane_id(),
+        }
+    }
+
+    pub fn move_focus(&self, current_id: usize, direction: MoveDirection) -> Option<usize> {
+        self.move_focus_internal(current_id, direction).unwrap_or(None)
+    }
+
+    fn move_focus_internal(&self, current_id: usize, direction: MoveDirection) -> Result<Option<usize>, ()> {
+        match self {
+            PaneTree::Leaf(p) => {
+                if p.id == current_id {
+                    Ok(None)
+                } else {
+                    Err(())
+                }
+            }
+            PaneTree::Split { direction: split_dir, left, right } => {
+                if let Ok(res) = left.move_focus_internal(current_id, direction) {
+                    if let Some(id) = res {
+                        return Ok(Some(id));
+                    }
+                    let can_cross = match (split_dir, direction) {
+                        (SplitDirection::Horizontal, MoveDirection::Right) => true,
+                        (SplitDirection::Vertical, MoveDirection::Down) => true,
+                        _ => false,
+                    };
+                    if can_cross {
+                        return Ok(Some(right.first_pane_id()));
+                    } else {
+                        return Ok(None);
+                    }
+                }
+
+                if let Ok(res) = right.move_focus_internal(current_id, direction) {
+                    if let Some(id) = res {
+                        return Ok(Some(id));
+                    }
+                    let can_cross = match (split_dir, direction) {
+                        (SplitDirection::Horizontal, MoveDirection::Left) => true,
+                        (SplitDirection::Vertical, MoveDirection::Up) => true,
+                        _ => false,
+                    };
+                    if can_cross {
+                        return Ok(Some(left.first_pane_id()));
+                    } else {
+                        return Ok(None);
+                    }
+                }
+
+                Err(())
             }
         }
     }
@@ -708,6 +776,22 @@ impl SplashApp {
                 self.focus = Focus::MainPane;
                 KeyAction::None
             }
+            KeyAction::MovePaneFocus(dir) => {
+                if self.focus == Focus::MainPane {
+                    if let Some(tab) = self.tabs.get_mut(self.active_tab_index) {
+                        if let Some(root) = &tab.root {
+                            if let Some(next_id) = root.move_focus(tab.active_pane_id, dir) {
+                                tab.active_pane_id = next_id;
+                            } else if dir == MoveDirection::Left {
+                                self.focus = Focus::FileTree;
+                            }
+                        }
+                    }
+                } else if self.focus == Focus::FileTree && dir == MoveDirection::Right {
+                    self.focus = Focus::MainPane;
+                }
+                KeyAction::None
+            }
             KeyAction::Forward(bytes) => {
                 if let Some(ref mut input) = self.launcher_input {
                     if !self.leader_state.is_active() {
@@ -938,7 +1022,96 @@ impl SplashApp {
                 let mut content = String::new();
                 if request.as_reader().read_to_string(&mut content).is_ok() {
                     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-                        if json["method"] == "tools/call" && json["params"]["name"] == "list_layout" {
+                        let method = json.get("method").and_then(|v| v.as_str()).unwrap_or("");
+                        if method == "initialize" || method == "server/discover" {
+                            let id = json.get("id").cloned().unwrap_or(serde_json::Value::Null);
+                            let response_json = serde_json::json!({
+                                "jsonrpc": "2.0",
+                                "id": id,
+                                "result": {
+                                    "protocolVersion": "2024-11-05",
+                                    "capabilities": {
+                                        "tools": {}
+                                    },
+                                    "serverInfo": {
+                                        "name": "splash",
+                                        "version": "0.1.0"
+                                    }
+                                }
+                            });
+                            let response_str = serde_json::to_string(&response_json).unwrap();
+                            let response = tiny_http::Response::from_string(response_str)
+                                .with_header(tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap());
+                            let _ = request.respond(response);
+                        } else if json["method"] == "notifications/initialized" {
+                            let _ = request.respond(tiny_http::Response::empty(204));
+                        } else if json["method"] == "tools/list" {
+                            let response_json = serde_json::json!({
+                                "jsonrpc": "2.0",
+                                "id": json["id"],
+                                "result": {
+                                    "tools": [
+                                        {
+                                            "name": "list_layout",
+                                            "description": "List the current tab and pane layout of Splash",
+                                            "inputSchema": {
+                                                "type": "object",
+                                                "properties": {}
+                                            }
+                                        },
+                                        {
+                                            "name": "open_file",
+                                            "description": "Open a file in a new pane or tab",
+                                            "inputSchema": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "file_path": { "type": "string", "description": "Absolute path to the file to open" },
+                                                    "location": { "type": "string", "description": "Where to open: split_right, split_down, replace_active, or new_tab" }
+                                                },
+                                                "required": ["file_path"]
+                                            }
+                                        },
+                                        {
+                                            "name": "close_pane",
+                                            "description": "Close a pane by its ID",
+                                            "inputSchema": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "pane_id": { "type": "integer", "description": "The ID of the pane to close" }
+                                                },
+                                                "required": ["pane_id"]
+                                            }
+                                        },
+                                        {
+                                            "name": "focus_pane",
+                                            "description": "Focus a pane by its ID",
+                                            "inputSchema": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "pane_id": { "type": "integer", "description": "The ID of the pane to focus" }
+                                                },
+                                                "required": ["pane_id"]
+                                            }
+                                        },
+                                        {
+                                            "name": "switch_tab",
+                                            "description": "Switch to a tab by its index",
+                                            "inputSchema": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "tab_index": { "type": "integer", "description": "Zero-based index of the tab to switch to" }
+                                                },
+                                                "required": ["tab_index"]
+                                            }
+                                        }
+                                    ]
+                                }
+                            });
+                            let response_str = serde_json::to_string(&response_json).unwrap();
+                            let response = tiny_http::Response::from_string(response_str)
+                                .with_header(tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap());
+                            let _ = request.respond(response);
+                        } else if json["method"] == "tools/call" && json["params"]["name"] == "list_layout" {
                             let mut tabs_json = Vec::new();
                             for tab in &self.tabs {
                                 let mut panes_json = Vec::new();
@@ -1420,11 +1593,11 @@ mod tests {
         let key_a = KeyEvent::new(KeyCode::Char('a'), crossterm::event::KeyModifiers::empty());
         assert_eq!(app.handle_key_event(&key_a), KeyAction::Forward(vec![b'a']));
 
-        // Press Ctrl+B Left -> Focus FileTree
+        // Press Ctrl+B e -> Focus FileTree
         let key_ctrl_b = KeyEvent::new(KeyCode::Char('b'), crossterm::event::KeyModifiers::CONTROL);
-        let key_left = KeyEvent::new(KeyCode::Left, crossterm::event::KeyModifiers::empty());
+        let key_e = KeyEvent::new(KeyCode::Char('e'), crossterm::event::KeyModifiers::empty());
         app.handle_key_event(&key_ctrl_b);
-        assert_eq!(app.handle_key_event(&key_left), KeyAction::None);
+        assert_eq!(app.handle_key_event(&key_e), KeyAction::None);
         assert_eq!(app.focus, Focus::FileTree);
 
         // When FileTree focused, character inputs are NOT forwarded to PTY
@@ -1876,10 +2049,10 @@ mod tests {
     #[test]
     fn test_close_harness_tab_kills_pty() {
         let config = HarnessConfig {
-            command: "echo".to_string(),
-            args: vec!["test".to_string()],
+            command: "bash".to_string(),
+            args: vec![],
         };
-        let pty = PtyHarness::spawn(&config, 24, 80, None).unwrap();
+        let pty = PtyHarness::spawn(&config, 24, 80, None, None).unwrap();
         let harness_tab = HarnessTab::with_pty("echo", pty, 24, 80);
 
         let mut app = SplashApp::new(config);
@@ -1917,11 +2090,11 @@ mod tests {
 
         // Leader shortcuts work in Empty Workspace
         let key_ctrl_b = KeyEvent::new(KeyCode::Char('b'), crossterm::event::KeyModifiers::CONTROL);
-        let key_left = KeyEvent::new(KeyCode::Left, crossterm::event::KeyModifiers::empty());
+        let key_e = KeyEvent::new(KeyCode::Char('e'), crossterm::event::KeyModifiers::empty());
         let key_right = KeyEvent::new(KeyCode::Right, crossterm::event::KeyModifiers::empty());
 
         app.handle_key_event(&key_ctrl_b);
-        app.handle_key_event(&key_left);
+        app.handle_key_event(&key_e);
         assert_eq!(app.focus, Focus::FileTree);
 
         app.handle_key_event(&key_ctrl_b);
