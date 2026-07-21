@@ -128,6 +128,13 @@ impl HarnessTab {
                     self.mcp_guard = Some(Arc::new(Mutex::new(guard)));
                 }
             }
+        } else if self.command == "claude" || self.command.ends_with("/claude") {
+            if let Some(url) = mcp_url {
+                let path = crate::mcp_guard::claude_config_path();
+                if let Ok(guard) = crate::mcp_guard::McpConfigGuard::register(path, "splash", url) {
+                    self.mcp_guard = Some(Arc::new(Mutex::new(guard)));
+                }
+            }
         }
         let config = HarnessConfig {
             command: self.command.clone(),
@@ -137,6 +144,7 @@ impl HarnessTab {
             self.pty = Some(Arc::new(Mutex::new(pty)));
         }
     }
+
 
     pub fn tick(&self) {
         if let Some(ref pty) = self.pty {
