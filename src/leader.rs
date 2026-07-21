@@ -1,4 +1,5 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crate::app::MoveDirection;
 
 #[derive(Debug, PartialEq, Clone, Default)]
 pub enum LeaderState {
@@ -17,6 +18,7 @@ pub enum KeyAction {
     CloseTab,
     OpenLauncher,
     Forward(Vec<u8>),
+    MovePaneFocus(MoveDirection),
 }
 
 impl LeaderState {
@@ -45,8 +47,11 @@ impl LeaderState {
                     KeyCode::Char('q') | KeyCode::Char('Q') => KeyAction::Quit,
                     KeyCode::Char('w') | KeyCode::Char('W') => KeyAction::CloseTab,
                     KeyCode::Char('h') | KeyCode::Char('H') => KeyAction::OpenLauncher,
-                    KeyCode::Left => KeyAction::FocusFileTree,
-                    KeyCode::Right => KeyAction::FocusMainPane,
+                    KeyCode::Char('e') | KeyCode::Char('E') => KeyAction::FocusFileTree,
+                    KeyCode::Left => KeyAction::MovePaneFocus(MoveDirection::Left),
+                    KeyCode::Right => KeyAction::MovePaneFocus(MoveDirection::Right),
+                    KeyCode::Up => KeyAction::MovePaneFocus(MoveDirection::Up),
+                    KeyCode::Down => KeyAction::MovePaneFocus(MoveDirection::Down),
                     KeyCode::Char(c @ '1'..='9') => {
                         let idx = (c as usize) - ('1' as usize);
                         KeyAction::SwitchTab(idx)
@@ -119,18 +124,18 @@ mod tests {
     fn test_leader_navigation_chords() {
         let mut leader = LeaderState::default();
 
-        // Ctrl+B Left -> FocusFileTree
+        // Ctrl+B e -> FocusFileTree
         leader.handle_key(&KeyEvent::new(KeyCode::Char('b'), KeyModifiers::CONTROL));
         assert_eq!(
-            leader.handle_key(&KeyEvent::new(KeyCode::Left, KeyModifiers::empty())),
+            leader.handle_key(&KeyEvent::new(KeyCode::Char('e'), KeyModifiers::empty())),
             KeyAction::FocusFileTree
         );
 
-        // Ctrl+B Right -> FocusMainPane
+        // Ctrl+B Right -> MovePaneFocus(Right)
         leader.handle_key(&KeyEvent::new(KeyCode::Char('b'), KeyModifiers::CONTROL));
         assert_eq!(
             leader.handle_key(&KeyEvent::new(KeyCode::Right, KeyModifiers::empty())),
-            KeyAction::FocusMainPane
+            KeyAction::MovePaneFocus(MoveDirection::Right)
         );
 
         // Ctrl+B 1..9 -> SwitchTab

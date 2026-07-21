@@ -12,6 +12,12 @@ use splash::{parse_args, HarnessConfig, KeyAction, SplashApp};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
+    
+    if args.len() == 3 && args[1] == "mcp-proxy" {
+        splash::mcp_proxy::proxy_run(&args[2]);
+        return;
+    }
+
     let config = match parse_args(&args) {
         Ok(cfg) => cfg,
         Err(err) => {

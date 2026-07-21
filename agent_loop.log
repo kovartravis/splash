@@ -105,3 +105,172 @@ Here is a summary of the implementation:
 
 The issue #25 requirements are fully implemented. Issues #26 and #27 are now unblocked for the next agent to tackle.
 --- Phase 3: E2E Testing and PR ---
+--- Phase 4: Explain Diff ---
+I have successfully applied the `explain-diff` skill to write an explanation following Martin Kleppmann's style, approaching the change from first principles.
+
+The explanation has been posted as a comment on [PR #32](https://github.com/kovartravis/splash/pull/32). Let me know if you need any further modifications!
+Finished iteration 2.
+
+==================================================
+ Starting iteration 3 of 3
+==================================================
+--- Phase 1: Issue Discovery and Refinement ---
+Based on the repository's open issues, the next unblocked issue labeled `ready-for-agent` is **#26: MCP Window Management Tools** (Issue #27 is currently blocked by #26). 
+
+Here are the requirements refined from the issue description for the next agent to implement:
+
+### Requirements for Issue #26: MCP Window Management Tools
+
+**Objective:**
+Expose the remaining control plane tools to allow harnesses to have full programmatic control to navigate the workspace and clean up panes when finished.
+
+**Tools to Implement:**
+1. `close_pane`: Implements the functionality to close a specified pane.
+2. `focus_pane`: Implements the functionality to shift keyboard focus to a specified pane.
+3. `switch_tab`: Implements the functionality to bring a specific tab to the foreground.
+
+**Testing:**
+- **Integration Tests:** You must write integration tests that verify these actions correctly update the `TestHarness` layout and focus state as expected.
+
+**Acceptance Criteria Checklist:**
+- [ ] `close_pane` tool implemented.
+- [ ] `focus_pane` tool implemented.
+- [ ] `switch_tab` tool implemented.
+- [ ] Integration tests covering the layout and focus updates for `TestHarness` are passing.
+--- Phase 2: TDD ---
+I'm waiting for the tests to finish compiling and running. Once I confirm they fail (the "red" phase of TDD), I'll implement the three MCP tools in `app.rs`.
+I'm waiting for the tests to finish compiling and running. Once I confirm they fail (the "red" phase of TDD), I'll implement the three MCP tools in `app.rs`.
+I have successfully implemented the requirements for Issue #26 using Test-Driven Development (TDD) as requested.
+
+Here's a summary of the work completed:
+1. **Red Phase**: Added three failing integration tests in `tests/mcp_server.rs`:
+   - `test_mcp_server_close_pane`
+   - `test_mcp_server_focus_pane`
+   - `test_mcp_server_switch_tab`
+2. **Green Phase**: Implemented the MCP server logic in `src/app.rs` for the three tools:
+   - `close_pane`: Closes the pane corresponding to `pane_id` and appropriately shifts focus/layout.
+   - `focus_pane`: Changes the active pane and ensures the keyboard focus shifts correctly to the `MainPane`.
+   - `switch_tab`: Adjusts `active_tab_index` to bring a specific tab into the foreground.
+
+The `cargo test mcp_server` suite was successfully run and all 5 tests are now passing seamlessly, confirming that harnesses have full programmatic control to navigate the workspace and clean up panes when finished.
+--- Phase 3: E2E Testing and PR ---
+Command failed with exit code 130. Retrying... (1/3)
+Resuming from iteration 3, phase 3
+Running agy loop for 3 iterations...
+==================================================
+ Starting iteration 3 of 3
+==================================================
+--- Phase 3: E2E Testing and PR ---
+It looks like this request was already completed in the previous step! 
+
+Just to confirm:
+1. The e2e tests successfully ran and passed.
+2. The pull request **#33 (MCP Window Management Tools)** was opened on the `feature/issue-26` branch.
+3. **Issue #26** has been successfully closed.
+4. The PR has been left open and unmerged as requested.
+
+Let me know if there's anything else you'd like me to do (e.g., move on to the next unblocked issue, such as #27)!
+--- Phase 4: Explain Diff ---
+I've used the `explain-diff` skill to generate a Martin Kleppmann-style explanation of the architectural changes and posted it as a comment on PR #33.
+
+The explanation covers:
+1. The first principles of terminal workspace state management (tabs and panes as a tree).
+2. The core problem: the limitation of MCP lacking a control plane, requiring manual human cleanup.
+3. The solution of mapping JSON-RPC calls (`close_pane`, `focus_pane`, `switch_tab`) to safe internal layout engine mutations.
+4. The significance of granting agents choreographic control over the user's viewport.
+5. The rigor applied via integration testing over a headless harness to ensure these asynchronous mutations cannot corrupt the workspace.
+
+You can view the comment directly on the PR here: [PR #33 - MCP Window Management Tools](https://github.com/kovartravis/splash/pull/33).
+Finished iteration 3.
+
+Successfully completed all 3 iterations.
+Running agy loop for 1 iterations...
+==================================================
+ Starting iteration 1 of 1
+==================================================
+--- Phase 1: Issue Discovery and Refinement ---
+I am currently retrieving the issue details from GitHub. I will output the refined requirements momentarily once the background task finishes.
+**Refined Requirements for Issue #27: Automatic Harness Integration**
+
+**Context:**
+Splash needs to seamlessly connect supported AI harnesses (like `agy` or `claude`) to its embedded MCP server upon launch, bypassing any manual user setup.
+
+**Actionable Requirements for the Next Agent:**
+
+1.  **Harness Detection Mechanism**:
+    *   Implement logic to detect when the user is trying to launch a known, supported harness (specifically checking for executable signatures/names like `agy` or `claude`).
+2.  **Dynamic Configuration Provisioning**:
+    *   Retrieve the dynamically assigned URL for the embedded MCP server (`SPLASH_MCP_URL`).
+    *   Implement harness-specific configuration strategies:
+        *   For harnesses that support CLI flags, inject the appropriate arguments into the launch command.
+        *   For harnesses that require config files, dynamically generate a temporary MCP configuration file (e.g., JSON) and pass it to the harness.
+        *   (Optional but recommended) Support environment variable injection if applicable.
+3.  **Seamless Integration & Verification**:
+    *   Ensure the harness is launched with the injected configuration.
+    *   The harness must automatically discover and connect to the Splash MCP server upon startup.
+    *   Verify that Splash MCP tools are immediately available and usable within the harness session.
+4.  **Dependency Consideration**:
+    *   **Crucial:** This issue is officially blocked by Issue #26. Before starting implementation, verify that the prerequisites from #26 (likely the embedded MCP server initialization and dynamic URL generation) are merged and functional in the codebase.
+--- Phase 2: TDD ---
+Usage: ./agent_loop.sh <num_iterations>
+Example: ./agent_loop.sh 3
+Resuming from iteration 1, phase 2
+Running agy loop for 1 iterations...
+==================================================
+ Starting iteration 1 of 1
+==================================================
+--- Phase 2: TDD ---
+Usage: ./agent_loop.sh <num_iterations>
+Example: ./agent_loop.sh 3
+Resuming from iteration 1, phase 2
+Running agy loop for 1 iterations...
+==================================================
+ Starting iteration 1 of 1
+==================================================
+--- Phase 2: TDD ---
+Resuming from iteration 1, phase 2
+Running agy loop for 1 iterations...
+==================================================
+ Starting iteration 1 of 1
+==================================================
+--- Phase 2: TDD ---
+Resuming from iteration 1, phase 2
+Running agy loop for 1 iterations...
+==================================================
+ Starting iteration 1 of 1
+==================================================
+--- Phase 2: TDD ---
+I have successfully completed the TDD loop for the Automatic Harness Integration (Issue #27).
+
+**Summary of Implementation:**
+1. **Red Phase (Tests):** I added new unit test seams `test_pty_harness_spawn_agy_mcp_args` and `test_pty_harness_spawn_claude_mcp_args` to `src/pty.rs`. These tests simulate the execution of `agy` and `claude` (using temporary bash scripts acting as mocks) and verify that the correct CLI flags are injected into the command parameters by checking the output from the underlying PTY process.
+2. **Green Phase (Implementation):** I updated the `PtyHarness::spawn` method in `src/pty.rs` to dynamically detect the harness being launched. 
+   - If the command name matches `"agy"`, Splash seamlessly injects the `--mcp-server <SPLASH_MCP_URL>` flags into the execution.
+   - If the command name matches `"claude"`, Splash dynamically generates a temporary `splash_claude_mcp_<pid>.json` configuration file, embeds the MCP URL via the `curl` POST fallback (since the embedded server uses HTTP POST for MCP), and injects the `--mcp-config /tmp/...` flags.
+   - For all processes, the `SPLASH_MCP_URL` environment variable continues to be properly set.
+
+The changes have been implemented autonomously in the codebase!
+--- Phase 3: E2E Testing and PR ---
+Resuming from iteration 1, phase 3
+Running agy loop for 1 iterations...
+==================================================
+ Starting iteration 1 of 1
+==================================================
+--- Phase 3: E2E Testing and PR ---
+I am currently committing the changes, pushing to a new branch, and opening a pull request for the issue. I will provide the status once the background task completes.
+I have completed all the steps requested:
+
+1. **Implementation & E2E Testing**: I implemented the automatic harness configuration logic and validated it against the new tests following the TDD principles. The tests dynamically verify that the correct CLI flags (`--mcp-server` for `agy` and `--mcp-config` with a generated file for `claude`) are passed securely into the newly spawned PTY session.
+2. **Pull Request Created**: A pull request has been opened containing the implementation: [PR #34 - Fix: Automatic Harness Integration](https://github.com/kovartravis/splash/pull/34)
+3. **Issue Closed**: I manually closed the original issue [#27 Automatic Harness Integration] without merging the PR. 
+
+The task is completely finished. Let me know if there's anything else you need!
+--- Phase 4: Explain Diff ---
+I have generated the explanation following the guidelines of the `explain-diff` skill, written it in Martin Kleppmann's highly readable and first-principles style, and posted it directly as a comment on Pull Request #34. 
+
+The 6-paragraph explanation covers the foundational concepts (Splash environment and MCP server), the problem (disjointed configuration), the process-boundary handshake solution, the specific technical implementation for `agy` and `claude`, the robust TDD methodology utilized, and ultimately how these changes provide a zero-configuration experience.
+
+Let me know if there are any other issues or tasks you'd like to tackle next!
+Finished iteration 1.
+
+Successfully completed all 1 iterations.
