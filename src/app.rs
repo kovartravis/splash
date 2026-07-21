@@ -74,6 +74,7 @@ pub struct HarnessTab {
     pub pty: Option<Arc<Mutex<PtyHarness>>>,
     pub parser: Arc<Mutex<Parser>>,
     pub last_size: Option<(u16, u16)>,
+    pub mcp_guard: Option<Arc<Mutex<crate::mcp_guard::McpConfigGuard>>>,
 }
 
 impl std::fmt::Debug for HarnessTab {
@@ -82,6 +83,7 @@ impl std::fmt::Debug for HarnessTab {
             .field("command", &self.command)
             .field("args", &self.args)
             .field("has_pty", &self.pty.is_some())
+            .field("has_mcp_guard", &self.mcp_guard.is_some())
             .finish()
     }
 }
@@ -104,6 +106,7 @@ impl HarnessTab {
             pty: None,
             parser: Arc::new(Mutex::new(Parser::new(22, 78, 1000))),
             last_size: None,
+            mcp_guard: None,
         }
     }
 
@@ -114,6 +117,7 @@ impl HarnessTab {
             pty: Some(Arc::new(Mutex::new(pty))),
             parser: Arc::new(Mutex::new(Parser::new(rows.max(1), cols.max(1), 1000))),
             last_size: Some((rows, cols)),
+            mcp_guard: None,
         }
     }
 
@@ -124,6 +128,13 @@ impl HarnessTab {
         };
         if let Ok(pty) = PtyHarness::spawn(&config, rows, cols, mcp_url) {
             self.pty = Some(Arc::new(Mutex::new(pty)));
+            if self.command == "agy" || self.command.ends_with("/agy") {
+                if let Some(url) = mcp_url {
+                    if let Ok(guard) = crate::mcp_guard::McpConfigGuard::register("mcp_config.json", "splash", url) {
+                        self.mcp_guard = Some(Arc::new(Mutex::new(guard)));
+                    }
+                }
+            }
         }
     }
 
