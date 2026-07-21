@@ -9,6 +9,38 @@ pub struct McpConfigGuard {
     pub created_file: bool,
 }
 
+pub fn claude_config_path() -> PathBuf {
+    if let Ok(override_path) = std::env::var("SPLASH_CLAUDE_CONFIG_PATH") {
+        return PathBuf::from(override_path);
+    }
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_else(|_| ".".to_string());
+    let home_path = std::path::Path::new(&home);
+
+    #[cfg(target_os = "macos")]
+    {
+        home_path.join("Library/Application Support/Claude/claude_desktop_config.json")
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            std::path::Path::new(&appdata).join("Claude/claude_desktop_config.json")
+        } else {
+            home_path.join("AppData/Roaming/Claude/claude_desktop_config.json")
+        }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
+            std::path::Path::new(&xdg).join("Claude/claude_desktop_config.json")
+        } else {
+            home_path.join(".config/Claude/claude_desktop_config.json")
+        }
+    }
+}
+
+
 impl McpConfigGuard {
     pub fn register(
         config_path: impl Into<PathBuf>,
@@ -176,5 +208,18 @@ mod tests {
 
         let _ = fs::remove_dir_all(&temp_dir);
     }
+
+    #[test]
+    fn test_claude_config_path_default_and_override() {
+        let default_path = claude_config_path();
+        assert!(default_path.to_string_lossy().contains("claude_desktop_config.json"));
+
+        let custom = "/tmp/custom_claude_config.json";
+        unsafe { std::env::set_var("SPLASH_CLAUDE_CONFIG_PATH", custom); }
+        assert_eq!(claude_config_path(), PathBuf::from(custom));
+        unsafe { std::env::remove_var("SPLASH_CLAUDE_CONFIG_PATH"); }
+    }
+
 }
+
 

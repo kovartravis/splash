@@ -122,21 +122,29 @@ impl HarnessTab {
     }
 
     pub fn spawn_pty(&mut self, rows: u16, cols: u16, mcp_url: Option<&str>) {
+        if self.command == "agy" || self.command.ends_with("/agy") {
+            if let Some(url) = mcp_url {
+                if let Ok(guard) = crate::mcp_guard::McpConfigGuard::register("mcp_config.json", "splash", url) {
+                    self.mcp_guard = Some(Arc::new(Mutex::new(guard)));
+                }
+            }
+        } else if self.command == "claude" || self.command.ends_with("/claude") {
+            if let Some(url) = mcp_url {
+                let path = crate::mcp_guard::claude_config_path();
+                if let Ok(guard) = crate::mcp_guard::McpConfigGuard::register(path, "splash", url) {
+                    self.mcp_guard = Some(Arc::new(Mutex::new(guard)));
+                }
+            }
+        }
         let config = HarnessConfig {
             command: self.command.clone(),
             args: self.args.clone(),
         };
         if let Ok(pty) = PtyHarness::spawn(&config, rows, cols, mcp_url) {
             self.pty = Some(Arc::new(Mutex::new(pty)));
-            if self.command == "agy" || self.command.ends_with("/agy") {
-                if let Some(url) = mcp_url {
-                    if let Ok(guard) = crate::mcp_guard::McpConfigGuard::register("mcp_config.json", "splash", url) {
-                        self.mcp_guard = Some(Arc::new(Mutex::new(guard)));
-                    }
-                }
-            }
         }
     }
+
 
     pub fn tick(&self) {
         if let Some(ref pty) = self.pty {
