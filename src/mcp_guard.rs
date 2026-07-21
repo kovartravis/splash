@@ -1,6 +1,35 @@
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Mutex;
 use serde_json::{json, Value};
+
+#[derive(Debug, Clone)]
+struct GuardCleanupEntry {
+    config_path: PathBuf,
+    server_name: String,
+    created_file: bool,
+}
+
+impl GuardCleanupEntry {
+    fn cleanup(&self) {
+        if self.created_file {
+            let _ = fs::remove_file(&self.config_path);
+        } else if self.config_path.exists() {
+            if let Ok(content) = fs::read_to_string(&self.config_path) {
+                if let Ok(mut root) = serde_json::from_str::<Value>(&content) {
+                    if let Some(mcp_servers) = root.get_mut("mcpServers").and_then(|v| v.as_object_mut()) {
+                        mcp_servers.remove(&self.server_name);
+                    }
+                    if let Ok(serialized) = serde_json::to_string_pretty(&root) {
+                        let _ = fs::write(&self.config_path, serialized);
+                    }
+                }
+            }
+        }
+    }
+}
+
+static REGISTERED_GUARDS: Mutex<Vec<GuardCleanupEntry>> = Mutex::new(Vec::new());
 
 #[derive(Debug)]
 pub struct McpConfigGuard {
@@ -62,29 +91,65 @@ impl McpConfigGuard {
         fs::write(&config_path, serialized)
             .map_err(|e| format!("Failed to write MCP config to {:?}: {}", config_path, e))?;
 
+        if let Ok(mut lock) = REGISTERED_GUARDS.lock() {
+            lock.push(GuardCleanupEntry {
+                config_path: config_path.clone(),
+                server_name: server_name.clone(),
+                created_file,
+            });
+        }
+
         Ok(Self {
             config_path,
             server_name,
             created_file,
         })
     }
+
+    pub fn cleanup_all() {
+        let entries = if let Ok(mut lock) = REGISTERED_GUARDS.lock() {
+            std::mem::take(&mut *lock)
+        } else {
+            Vec::new()
+        };
+
+        for entry in entries {
+            entry.cleanup();
+        }
+    }
+}
+
+pub fn setup_panic_hook() {
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        McpConfigGuard::cleanup_all();
+        default_hook(info);
+    }));
+}
+
+pub fn setup_signal_handlers() {
+    let _ = ctrlc::set_handler(move || {
+        McpConfigGuard::cleanup_all();
+        std::process::exit(130);
+    });
+}
+
+pub fn install_signal_and_panic_hooks() {
+    setup_panic_hook();
+    setup_signal_handlers();
 }
 
 impl Drop for McpConfigGuard {
     fn drop(&mut self) {
-        if self.created_file {
-            let _ = fs::remove_file(&self.config_path);
-        } else if self.config_path.exists() {
-            if let Ok(content) = fs::read_to_string(&self.config_path) {
-                if let Ok(mut root) = serde_json::from_str::<Value>(&content) {
-                    if let Some(mcp_servers) = root.get_mut("mcpServers").and_then(|v| v.as_object_mut()) {
-                        mcp_servers.remove(&self.server_name);
-                    }
-                    if let Ok(serialized) = serde_json::to_string_pretty(&root) {
-                        let _ = fs::write(&self.config_path, serialized);
-                    }
-                }
-            }
+        GuardCleanupEntry {
+            config_path: self.config_path.clone(),
+            server_name: self.server_name.clone(),
+            created_file: self.created_file,
+        }
+        .cleanup();
+
+        if let Ok(mut lock) = REGISTERED_GUARDS.lock() {
+            lock.retain(|entry| !(entry.config_path == self.config_path && entry.server_name == self.server_name));
         }
     }
 }
@@ -176,5 +241,60 @@ mod tests {
 
         let _ = fs::remove_dir_all(&temp_dir);
     }
+
+    #[test]
+    fn test_mcp_config_guard_cleanup_all_triggers_disk_cleanup() {
+        let temp_dir = std::env::temp_dir().join("splash_test_mcp_guard_cleanup_all");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let config_path = temp_dir.join("mcp_config.json");
+        let guard = McpConfigGuard::register(&config_path, "splash", "http://127.0.0.1:9999")
+            .expect("Failed to register McpConfigGuard");
+
+        assert!(config_path.exists());
+
+        // Call cleanup_all without dropping guard manually
+        McpConfigGuard::cleanup_all();
+
+        // Disk cleanup should have been triggered
+        assert!(!config_path.exists());
+
+        // Retain guard in scope so we are certain cleanup_all removed it, not stack drop
+        let _ = guard;
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_panic_hook_triggers_mcp_config_cleanup() {
+        let temp_dir = std::env::temp_dir().join("splash_test_mcp_guard_panic");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let config_path = temp_dir.join("mcp_config.json");
+
+        // Install panic hook
+        setup_panic_hook();
+
+        let path_clone = config_path.clone();
+        let handle = std::thread::spawn(move || {
+            let guard = McpConfigGuard::register(&path_clone, "splash", "http://127.0.0.1:9999")
+                .expect("Failed to register McpConfigGuard");
+            assert!(path_clone.exists());
+            
+            // Leak guard so stack unwinding / drop doesn't clean it up, simulating process abort/panic
+            std::mem::forget(guard);
+            panic!("Simulated panic in test thread");
+        });
+
+        let _ = handle.join();
+
+        // Disk cleanup should have been triggered by panic hook
+        assert!(!config_path.exists());
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
 }
+
+
 
