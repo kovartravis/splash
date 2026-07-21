@@ -76,14 +76,20 @@ for (( i=START_ITERATION; i<=ITERATIONS; i++ )); do
     
     if [ "$START_PHASE" -le 3 ]; then
         save_state "$i" 3
-        echo "--- Phase 3: E2E Testing and PR ---" | tee -a "$LOG_FILE"
-        run_agy_with_retry agy --dangerously-skip-permissions --print-timeout 1h -c --print "Verify the implementation using e2e testing. Once verified, open a pull request for the issue and close the issue. Do not merge the PR." < /dev/null
+        echo "--- Phase 3: E2E Testing ---" | tee -a "$LOG_FILE"
+        run_agy_with_retry agy --dangerously-skip-permissions --print-timeout 1h -c --print "Verify the implementation using e2e testing." < /dev/null
     fi
     
     if [ "$START_PHASE" -le 4 ]; then
         save_state "$i" 4
-        echo "--- Phase 4: Explain Diff ---" | tee -a "$LOG_FILE"
-        run_agy_with_retry agy --dangerously-skip-permissions --print-timeout 1h -c --print "Use the explain-diff skill at /root/splash/.agents/skills/explain-diff/SKILL.md to explain the changes made in this iteration, and write the explanation as a comment on the PR." < /dev/null
+        echo "--- Phase 4: Code Review ---" | tee -a "$LOG_FILE"
+        run_agy_with_retry agy --dangerously-skip-permissions --print-timeout 1h -c --print "Use the code-review skill at /root/splash/.agents/skills/code-review/SKILL.md to review the changes made in this iteration, and report any findings." < /dev/null
+    fi
+    
+    if [ "$START_PHASE" -le 5 ]; then
+        save_state "$i" 5
+        echo "--- Phase 5: Code Review Fixes ---" | tee -a "$LOG_FILE"
+        run_agy_with_retry agy --dangerously-skip-permissions --print-timeout 1h -c --print "Review the code review findings from Phase 4 and address or fix any issues, smells, or standards violations identified during the code review." < /dev/null
     fi
     
     echo "Finished iteration $i." | tee -a "$LOG_FILE"
@@ -94,6 +100,23 @@ for (( i=START_ITERATION; i<=ITERATIONS; i++ )); do
     save_state "$((i + 1))" 1
 done
 
-echo "Successfully completed all $ITERATIONS iterations." | tee -a "$LOG_FILE"
+if [ "$START_PHASE" -le 6 ]; then
+    save_state "$((ITERATIONS + 1))" 6
+    echo "==================================================" | tee -a "$LOG_FILE"
+    echo " Phase 6: Create PR" | tee -a "$LOG_FILE"
+    echo "==================================================" | tee -a "$LOG_FILE"
+    run_agy_with_retry agy --dangerously-skip-permissions --print-timeout 1h -c --print "Open a single pull request for all changes made during this run and close the resolved issues. Do not merge the PR." < /dev/null
+    START_PHASE=7
+fi
+
+if [ "$START_PHASE" -le 7 ]; then
+    save_state "$((ITERATIONS + 1))" 7
+    echo "==================================================" | tee -a "$LOG_FILE"
+    echo " Phase 7: Explain Diff" | tee -a "$LOG_FILE"
+    echo "==================================================" | tee -a "$LOG_FILE"
+    run_agy_with_retry agy --dangerously-skip-permissions --print-timeout 1h -c --print "Use the explain-diff skill at /root/splash/.agents/skills/explain-diff/SKILL.md to explain the changes made in this run, and write the explanation as a comment on the PR." < /dev/null
+fi
+
+echo "Successfully completed all $ITERATIONS iterations and PR creation." | tee -a "$LOG_FILE"
 # Clean up state file on success
 rm -f "$STATE_FILE"

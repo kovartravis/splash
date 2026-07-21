@@ -3,9 +3,9 @@
     "splash": {
       "args": [
         "mcp-proxy",
-        "http://127.0.0.1:55965"
+        "http://127.0.0.1:56239"
       ],
-      "command": "/Users/Travis/Repos/splash/target/debug/deps/splash-444db302cc0841fc"
+      "command": "/Users/Travis/Repos/splash/target/debug/splash"
     }
   }
 }
