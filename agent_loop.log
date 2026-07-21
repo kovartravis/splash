@@ -314,3 +314,17 @@ Following the **Test-Driven Development (TDD)** red → green cycle, signal and 
 #### **Verification**
 - Full `cargo test` suite executed and passed cleanly across unit and integration tests.
 --- Phase 3: E2E Testing and PR ---
+### E2E Verification & PR Lifecycle Summary
+
+#### **1. E2E Verification**
+- Verified with both unit tests in [src/mcp_guard.rs](file:///Users/Travis/Repos/splash/src/mcp_guard.rs) and end-to-end integration tests in [tests/mcp_signal_panic_integration.rs](file:///Users/Travis/Repos/splash/tests/mcp_signal_panic_integration.rs) and [tests/agy_mcp_config_integration.rs](file:///Users/Travis/Repos/splash/tests/agy_mcp_config_integration.rs).
+- Verified disk cleanup behavior when thread panics occur, process interrupt signals (`SIGINT`/`SIGTERM`) are caught, and that multiple/idempotent cleanup calls complete safely without errors.
+
+#### **2. Pull Request Opened**
+- **Branch:** `feat/signal-panic-mcp-guard-37`
+- **PR:** [#40 feat: Signal & Panic Safety Hooks for McpConfigGuard (#37)](https://github.com/kovartravis/splash/pull/40)
+
+#### **3. Issue Closed**
+- **Issue #37:** [Signal & Panic Safety Hooks for McpConfigGuard](https://github.com/kovartravis/splash/issues/37) has been closed on GitHub.
+- *PR #40 has intentionally been left open without merging as instructed.*
+--- Phase 4: Explain Diff ---
